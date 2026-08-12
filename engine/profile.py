@@ -5,6 +5,10 @@ from pathlib import Path
 import duckdb
 
 
+def progress(message: str) -> None:
+    print(f"PROGRESS\t{message}", flush=True)
+
+
 def profile_dataset(file_path: str) -> dict:
     path = Path(file_path)
 
@@ -12,6 +16,8 @@ def profile_dataset(file_path: str) -> dict:
         raise FileNotFoundError(f"File not found: {path}")
 
     extension = path.suffix.lower()
+
+    progress("Opening dataset")
 
     connection = duckdb.connect()
 
@@ -22,6 +28,8 @@ def profile_dataset(file_path: str) -> dict:
     else:
         raise ValueError(f"Unsupported format for profiling: {extension}")
 
+    progress("Detecting structure")
+
     columns = [
         {
             "name": name,
@@ -30,7 +38,11 @@ def profile_dataset(file_path: str) -> dict:
         for name, data_type in zip(relation.columns, relation.types)
     ]
 
+    progress("Counting rows")
+
     row_count = relation.aggregate("count(*)").fetchone()[0]
+
+    progress("Preparing overview")
 
     return {
         "file": path.name,
@@ -43,14 +55,15 @@ def profile_dataset(file_path: str) -> dict:
 if __name__ == "__main__":
     try:
         result = profile_dataset(sys.argv[1])
-        print(json.dumps(result, ensure_ascii=False))
+
+        print(
+            "RESULT\t" + json.dumps(result, ensure_ascii=False),
+            flush=True,
+        )
+
     except Exception as error:
         print(
-            json.dumps(
-                {
-                    "error": str(error),
-                },
-                ensure_ascii=False,
-            )
+            f"ERROR\t{error}",
+            flush=True,
         )
         sys.exit(1)
