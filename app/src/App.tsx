@@ -1,9 +1,38 @@
 import { useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import "./App.css";
 
+type FileInfo = {
+  name: string;
+  path: string;
+  extension: string;
+  size: number;
+};
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+
+  const kilobytes = bytes / 1024;
+
+  if (kilobytes < 1024) {
+    return `${kilobytes.toFixed(1)} KB`;
+  }
+
+  const megabytes = kilobytes / 1024;
+
+  if (megabytes < 1024) {
+    return `${megabytes.toFixed(1)} MB`;
+  }
+
+  const gigabytes = megabytes / 1024;
+  return `${gigabytes.toFixed(2)} GB`;
+}
+
 function App() {
-  const [selectedFile, setSelectedFile] = useState<string | null>(null);
+  const [fileInfo, setFileInfo] = useState<FileInfo | null>(null);
 
   async function openDataset() {
     const file = await open({
@@ -17,9 +46,15 @@ function App() {
       ],
     });
 
-    if (typeof file === "string") {
-      setSelectedFile(file);
+    if (typeof file !== "string") {
+      return;
     }
+
+    const info = await invoke<FileInfo>("get_file_info", {
+      path: file,
+    });
+
+    setFileInfo(info);
   }
 
   return (
@@ -45,16 +80,20 @@ function App() {
           </button>
         </div>
 
-        {selectedFile && (
+        {fileInfo && (
           <div className="selected-file">
-            <strong>Selected dataset</strong>
-            <span>{selectedFile}</span>
+            <div className="file-name">{fileInfo.name}</div>
+
+            <div className="file-details">
+              <span>{fileInfo.extension.toUpperCase()}</span>
+              <span>{formatFileSize(fileInfo.size)}</span>
+            </div>
+
+            <div className="file-path">{fileInfo.path}</div>
           </div>
         )}
 
-        <p className="local-note">
-          Your source data stays local.
-        </p>
+        <p className="local-note">Your source data stays local.</p>
       </section>
     </main>
   );

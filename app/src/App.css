@@ -116,23 +116,31 @@ h1 {
   text-align: center;
 }
 
-.selected-file {
+..selected-file {
   margin-top: 20px;
-  padding: 16px 18px;
+  padding: 18px 20px;
   border: 1px solid #d8dde2;
-  border-radius: 10px;
+  border-radius: 12px;
   background: white;
+}
+
+.file-name {
+  font-size: 16px;
+  font-weight: 650;
+  margin-bottom: 8px;
+}
+
+.file-details {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.selected-file strong {
-  font-size: 14px;
-}
-
-.selected-file span {
-  color: #66717d;
+  gap: 16px;
+  margin-bottom: 10px;
+  color: #4f5b66;
   font-size: 13px;
+  font-weight: 600;
+}
+
+.file-path {
+  color: #7b858f;
+  font-size: 12px;
   overflow-wrap: anywhere;
 }
