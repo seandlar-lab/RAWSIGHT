@@ -1,49 +1,61 @@
 import { useState } from "react";
-import reactLogo from "./assets/react.svg";
-import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-dialog";
 import "./App.css";
 
 function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
+  const [selectedFile, setSelectedFile] = useState<string | null>(null);
 
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
+  async function openDataset() {
+    const file = await open({
+      multiple: false,
+      directory: false,
+      filters: [
+        {
+          name: "Data files",
+          extensions: ["csv", "xlsx", "xls", "parquet"],
+        },
+      ],
+    });
+
+    if (typeof file === "string") {
+      setSelectedFile(file);
+    }
   }
 
   return (
-    <main className="container">
-      <h1>Welcome to Tauri + React</h1>
+    <main className="app-shell">
+      <section className="hero">
+        <div className="brand">RAWSIGHT</div>
 
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
+        <h1>The good, the bad and the ugly of your data.</h1>
 
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
-        />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
+        <p className="subtitle">
+          Understand, validate and prepare your data for AI.
+        </p>
+
+        <div className="drop-zone">
+          <div className="drop-icon">＋</div>
+
+          <h2>Drop a dataset here</h2>
+
+          <p>CSV · Excel · Parquet</p>
+
+          <button type="button" onClick={openDataset}>
+            Open dataset
+          </button>
+        </div>
+
+        {selectedFile && (
+          <div className="selected-file">
+            <strong>Selected dataset</strong>
+            <span>{selectedFile}</span>
+          </div>
+        )}
+
+        <p className="local-note">
+          Your source data stays local.
+        </p>
+      </section>
     </main>
   );
 }
