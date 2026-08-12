@@ -14,12 +14,24 @@ type FileInfo = {
 type ColumnInfo = {
   name: string;
   type: string;
+  null_count: number;
+  null_percent: number;
+  distinct_count: number;
+  unique_percent: number;
+  min: string | number | null;
+  max: string | number | null;
+  
+  
 };
 
 type DatasetProfile = {
   file: string;
   rows: number;
   column_count: number;
+  duplicate_rows: number;
+  duplicate_percent: number;
+  missing_values: number;
+  missing_percent: number;
   columns: ColumnInfo[];
 };
 
