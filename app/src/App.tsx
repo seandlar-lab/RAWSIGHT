@@ -20,8 +20,8 @@ type ColumnInfo = {
   unique_percent: number;
   min: string | number | null;
   max: string | number | null;
-  
-  
+
+
 };
 
 type DatasetProfile = {
@@ -59,6 +59,46 @@ function formatFileSize(bytes: number): string {
   const gigabytes = megabytes / 1024;
 
   return `${gigabytes.toFixed(2)} GB`;
+}
+function formatProfileValue(value: string | number | null): string {
+  if (value === null) {
+    return "—";
+  }
+
+  return String(value);
+}
+
+function getColumnSignals(
+  column: ColumnInfo,
+  rowCount: number
+): string[] {
+  const signals: string[] = [];
+  const nonNullCount = rowCount - column.null_count;
+
+  if (
+    nonNullCount > 0 &&
+    column.distinct_count === nonNullCount
+  ) {
+    signals.push("Unique");
+  }
+
+  if (column.distinct_count === 1) {
+    signals.push("Constant");
+  }
+
+  if (
+    nonNullCount > 0 &&
+    column.distinct_count > 1 &&
+    column.distinct_count <= 20
+  ) {
+    signals.push("Low cardinality");
+  }
+
+  if (column.null_count > 0) {
+    signals.push("Missing");
+  }
+
+  return signals;
 }
 
 function App() {
@@ -228,17 +268,27 @@ function App() {
           <div className="profile-result">
             <div className="profile-summary">
               <div className="profile-card">
-                <strong>
-                  {profile.rows.toLocaleString()}
-                </strong>
+                <strong>{profile.rows.toLocaleString()}</strong>
                 <span>Rows</span>
               </div>
 
               <div className="profile-card">
-                <strong>
-                  {profile.column_count.toLocaleString()}
-                </strong>
+                <strong>{profile.column_count.toLocaleString()}</strong>
                 <span>Columns</span>
+              </div>
+
+              <div className="profile-card">
+                <strong>{profile.duplicate_rows.toLocaleString()}</strong>
+                <span>
+                  Exact duplicates · {profile.duplicate_percent.toFixed(2)}%
+                </span>
+              </div>
+
+              <div className="profile-card">
+                <strong>{profile.missing_values.toLocaleString()}</strong>
+                <span>
+                  Missing values · {profile.missing_percent.toFixed(2)}%
+                </span>
               </div>
             </div>
 
@@ -249,12 +299,50 @@ function App() {
               </div>
 
               {profile.columns.slice(0, 8).map((column) => (
-                <div
-                  className="column-row"
-                  key={column.name}
-                >
-                  <span>{column.name}</span>
-                  <code>{column.type}</code>
+                <div className="column-profile" key={column.name}>
+                  <div className="column-profile-title">
+                    <span>{column.name}</span>
+                    <code>{column.type}</code>
+                  </div>
+
+                  <div className="column-metrics">
+                    <span>
+                      Missing{" "}
+                      <strong>{column.null_count.toLocaleString()}</strong>
+                    </span>
+
+                    <span>
+                      Distinct{" "}
+                      <strong>{column.distinct_count.toLocaleString()}</strong>
+                    </span>
+
+                    <span>
+                      Cardinality{" "}
+                      <strong>{column.unique_percent.toFixed(1)}%</strong>
+                    </span>
+
+                    {column.min !== null && (
+                      <span>
+                        Min{" "}
+                        <strong>{formatProfileValue(column.min)}</strong>
+                      </span>
+                    )}
+
+                    {column.max !== null && (
+                      <span>
+                        Max{" "}
+                        <strong>{formatProfileValue(column.max)}</strong>
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="column-signals">
+                    {getColumnSignals(column, profile.rows).map((signal) => (
+                      <span className="column-signal" key={signal}>
+                        {signal}
+                      </span>
+                    ))}
+                  </div>
                 </div>
               ))}
 
@@ -266,7 +354,6 @@ function App() {
             </div>
           </div>
         )}
-
         {error && (
           <div className="analysis-error">
             <strong>Could not analyze dataset</strong>
