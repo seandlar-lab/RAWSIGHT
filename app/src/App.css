@@ -366,3 +366,43 @@ h1 {
   font-size: 10px;
   font-weight: 600;
 }
+.semantic-hint {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid #d8dde2;
+  border-radius: 8px;
+  background: #f7f8f9;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.semantic-hint > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.semantic-hint > div > strong {
+  display: block;
+  font-size: 12px;
+  line-height: 1.3;
+  color: #17202a;
+}
+
+.semantic-hint > div > span {
+  display: block;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #66717d;
+}
+
+.semantic-warning {
+  display: block;
+  white-space: nowrap;
+  font-size: 11px;
+  line-height: 1.4;
+  font-weight: 600;
+  color: #66717d;
+}

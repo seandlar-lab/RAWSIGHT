@@ -9,8 +9,16 @@ type FileInfo = {
   path: string;
   extension: string;
   size: number;
-};
 
+};
+type SemanticHint = {
+  suggested_type: string;
+  format: string;
+  confidence: number;
+  valid_count: number;
+  candidate_count: number;
+  zero_count: number;
+};
 type ColumnInfo = {
   name: string;
   type: string;
@@ -20,7 +28,7 @@ type ColumnInfo = {
   unique_percent: number;
   min: string | number | null;
   max: string | number | null;
-
+  semantic_hint: SemanticHint | null;
 
 };
 
@@ -343,6 +351,23 @@ function App() {
                       </span>
                     ))}
                   </div>
+                  {column.semantic_hint && (
+                    <div className="semantic-hint">
+                      <div>
+                        <strong>Possible {column.semantic_hint.suggested_type}</strong>
+                        <span>
+                          {column.semantic_hint.format} ·{" "}
+                          {column.semantic_hint.confidence.toFixed(1)}% pattern match
+                        </span>
+                      </div>
+
+                      {column.semantic_hint.zero_count > 0 && (
+                        <span className="semantic-warning">
+                          {column.semantic_hint.zero_count.toLocaleString()} zero values
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
 

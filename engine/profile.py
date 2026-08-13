@@ -44,6 +44,75 @@ def json_safe(value):
 
     return str(value)
 
+def detect_yyyymmdd_date(
+    connection,
+    column_name: str,
+    data_type: str,
+    row_count: int,
+):
+    integer_types = {
+        "TINYINT",
+        "SMALLINT",
+        "INTEGER",
+        "BIGINT",
+        "HUGEINT",
+        "UTINYINT",
+        "USMALLINT",
+        "UINTEGER",
+        "UBIGINT",
+    }
+
+    if data_type.upper() not in integer_types:
+        return None
+
+    column = quote_identifier(column_name)
+
+    result = connection.execute(
+        f"""
+        SELECT
+            COUNT(*) FILTER (
+                WHERE {column} = 0
+            ) AS zero_count,
+
+            COUNT(*) FILTER (
+                WHERE {column} IS NOT NULL
+                  AND {column} <> 0
+            ) AS candidate_count,
+
+            COUNT(*) FILTER (
+                WHERE {column} IS NOT NULL
+                  AND {column} <> 0
+                  AND try_strptime(
+                      CAST({column} AS VARCHAR),
+                      '%Y%m%d'
+                  ) IS NOT NULL
+            ) AS valid_date_count
+
+        FROM rawsight_source
+        """
+    ).fetchone()
+
+    zero_count = result[0]
+    candidate_count = result[1]
+    valid_date_count = result[2]
+
+    if candidate_count == 0:
+        return None
+
+    confidence = valid_date_count / candidate_count * 100
+
+    # Vi kräver starkt stöd i själva värdena.
+    if confidence < 95:
+        return None
+
+    return {
+        "suggested_type": "DATE",
+        "format": "YYYYMMDD",
+        "confidence": round(confidence, 2),
+        "valid_count": valid_date_count,
+        "candidate_count": candidate_count,
+        "zero_count": zero_count,
+    }
 
 def profile_dataset(file_path: str) -> dict:
     path = Path(file_path)
@@ -208,6 +277,15 @@ def profile_dataset(file_path: str) -> dict:
         if total_cells > 0
         else 0.0
     )
+    progress("Detecting semantic patterns")
+
+    for column in columns:
+        column["semantic_hint"] = detect_yyyymmdd_date(
+            connection,
+            column["name"],
+            column["type"],
+            row_count,
+        )
 
     progress("Preparing overview")
 
@@ -227,7 +305,6 @@ def profile_dataset(file_path: str) -> dict:
         ),
         "columns": columns,
     }
-
 
 if __name__ == "__main__":
     try:
