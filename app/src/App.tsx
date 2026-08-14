@@ -31,6 +31,16 @@ type ColumnInfo = {
   semantic_hint: SemanticHint | null;
 
 };
+type RowInspection = {
+  filter: {
+    column: string;
+    value: string;
+  };
+  total_rows: number;
+  returned_rows: number;
+  columns: string[];
+  rows: (string | number | boolean | null)[][];
+};
 
 type DatasetProfile = {
   file: string;
@@ -118,6 +128,10 @@ function App() {
   const [progressSteps, setProgressSteps] = useState<string[]>([]);
   const [analysisComplete, setAnalysisComplete] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [rowInspection, setRowInspection] =
+    useState<RowInspection | null>(null);
+
+  const [isInspecting, setIsInspecting] = useState(false);
 
   useEffect(() => {
     const unlistenPromise = listen<ProfileProgress>(
@@ -160,6 +174,7 @@ function App() {
 
     setProfile(null);
     setError(null);
+    setRowInspection(null);
     setProgressSteps([]);
     setAnalysisComplete(false);
     setProgressMessage("Preparing analysis");
@@ -187,7 +202,31 @@ function App() {
       setIsAnalyzing(false);
     }
   }
+  async function inspectZeroRows(column: ColumnInfo) {
+    if (!fileInfo) {
+      return;
+    }
 
+    setIsInspecting(true);
+    setRowInspection(null);
+
+    try {
+      const result = await invoke<string>("inspect_rows", {
+        path: fileInfo.path,
+        column: column.name,
+        value: "0",
+        limit: 100,
+      });
+
+      const parsed = JSON.parse(result) as RowInspection;
+
+      setRowInspection(parsed);
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setIsInspecting(false);
+    }
+  }
   return (
     <main className="app-shell">
       <section className="hero">
@@ -351,10 +390,13 @@ function App() {
                       </span>
                     ))}
                   </div>
+
                   {column.semantic_hint && (
                     <div className="semantic-hint">
                       <div>
-                        <strong>Possible {column.semantic_hint.suggested_type}</strong>
+                        <strong>
+                          Possible {column.semantic_hint.suggested_type}
+                        </strong>
                         <span>
                           {column.semantic_hint.format} ·{" "}
                           {column.semantic_hint.confidence.toFixed(1)}% pattern match
@@ -362,9 +404,19 @@ function App() {
                       </div>
 
                       {column.semantic_hint.zero_count > 0 && (
-                        <span className="semantic-warning">
-                          {column.semantic_hint.zero_count.toLocaleString()} zero values
-                        </span>
+                        <div className="semantic-actions">
+                          <span className="semantic-warning">
+                            {column.semantic_hint.zero_count.toLocaleString()} zero values
+                          </span>
+
+                          <button
+                            type="button"
+                            onClick={() => inspectZeroRows(column)}
+                            disabled={isInspecting}
+                          >
+                            {isInspecting ? "Loading..." : "Show rows"}
+                          </button>
+                        </div>
                       )}
                     </div>
                   )}
@@ -376,6 +428,54 @@ function App() {
                   + {profile.columns.length - 8} more columns
                 </div>
               )}
+            </div>
+          </div>
+        )}
+        {rowInspection && (
+          <div className="row-inspection">
+            <div className="row-inspection-header">
+              <div>
+                <strong>
+                  Rows where {rowInspection.filter.column} ={" "}
+                  {rowInspection.filter.value}
+                </strong>
+
+                <span>
+                  Showing {rowInspection.returned_rows.toLocaleString()} of{" "}
+                  {rowInspection.total_rows.toLocaleString()} matching rows
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setRowInspection(null)}
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="row-table-container">
+              <table className="row-table">
+                <thead>
+                  <tr>
+                    {rowInspection.columns.map((column) => (
+                      <th key={column}>{column}</th>
+                    ))}
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {rowInspection.rows.map((row, rowIndex) => (
+                    <tr key={rowIndex}>
+                      {row.map((value, columnIndex) => (
+                        <td key={columnIndex}>
+                          {value === null ? "NULL" : String(value)}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         )}

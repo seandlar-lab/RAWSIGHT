@@ -406,3 +406,78 @@ h1 {
   font-weight: 600;
   color: #66717d;
 }
+.row-inspection {
+  margin-top: 16px;
+  border: 1px solid #d8dde2;
+  border-radius: 12px;
+  background: white;
+  overflow: hidden;
+}
+
+.row-inspection-header {
+  padding: 16px 18px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  border-bottom: 1px solid #e5e8eb;
+}
+
+.row-inspection-header > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.row-inspection-header strong {
+  font-size: 13px;
+}
+
+.row-inspection-header span {
+  color: #7b858f;
+  font-size: 11px;
+}
+
+.row-inspection-header button {
+  border: 1px solid #d8dde2;
+  border-radius: 7px;
+  padding: 6px 10px;
+  background: white;
+  color: #4f5b66;
+  cursor: pointer;
+}
+
+.row-table-container {
+  width: 100%;
+  overflow-x: auto;
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.row-table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.row-table th,
+.row-table td {
+  padding: 9px 12px;
+  border-bottom: 1px solid #eef0f2;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.row-table th {
+  position: sticky;
+  top: 0;
+  background: #f7f8f9;
+  color: #56616c;
+  font-weight: 600;
+  z-index: 1;
+}
+
+.row-table td {
+  color: #4f5b66;
+}

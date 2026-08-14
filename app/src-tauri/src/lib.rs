@@ -140,15 +140,76 @@ fn profile_dataset(app: AppHandle, path: String) -> Result<String, String> {
     result.ok_or_else(|| "Profiling engine returned no result".to_string())
 }
 
+#[tauri::command(async)]
+fn inspect_rows(
+    path: String,
+    column: String,
+    value: String,
+    limit: u32,
+) -> Result<String, String> {
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+
+    let project_root = manifest_dir
+        .parent()
+        .and_then(|path| path.parent())
+        .ok_or("Could not locate RAWSIGHT project root")?;
+
+    let python = project_root
+        .join(".venv")
+        .join("Scripts")
+        .join("python.exe");
+
+    let inspect_script = project_root
+        .join("engine")
+        .join("inspect_rows.py");
+
+    if !python.exists() {
+        return Err(format!(
+            "Python environment not found: {}",
+            python.display()
+        ));
+    }
+
+    if !inspect_script.exists() {
+        return Err(format!(
+            "Row inspection engine not found: {}",
+            inspect_script.display()
+        ));
+    }
+
+    let output = Command::new(&python)
+        .arg(&inspect_script)
+        .arg(&path)
+        .arg(&column)
+        .arg(&value)
+        .arg(limit.to_string())
+        .output()
+        .map_err(|error| {
+            format!("Could not start row inspection engine: {error}")
+        })?;
+
+    let stdout = String::from_utf8(output.stdout)
+        .map_err(|error| {
+            format!("Invalid output from row inspection engine: {error}")
+        })?;
+
+    if !output.status.success() {
+        return Err(stdout.trim().to_string());
+    }
+
+    Ok(stdout.trim().to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
-            get_file_info,
-            profile_dataset
-        ])
+		get_file_info,
+		profile_dataset,
+		inspect_rows
+		])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
