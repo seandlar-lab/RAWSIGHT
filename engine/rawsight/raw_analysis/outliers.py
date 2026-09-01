@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 import duckdb
 
 from rawsight.raw_analysis.distributions import (
@@ -55,9 +57,14 @@ def analyze_iqr_outliers(
 
     iqr = q3 - q1
 
-    lower_bound = q1 - (1.5 * iqr)
-    upper_bound = q3 + (1.5 * iqr)
+    multiplier = (
+        Decimal("1.5")
+        if isinstance(iqr, Decimal)
+        else 1.5
+    )
 
+    lower_bound = q1 - (multiplier * iqr)
+    upper_bound = q3 + (multiplier * iqr)
     (
         non_null_count,
         outlier_count,

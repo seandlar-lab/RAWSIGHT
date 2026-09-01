@@ -23,6 +23,8 @@ def analyze_column(
     semantic_type: str | None = None,
     format_hint: str | None = None,
     excluded_values: list[str] | None = None,
+    role: str | None = None,
+    included: bool = True,
 ) -> dict:
     if column_name not in relation.columns:
         raise ValueError(
@@ -38,21 +40,44 @@ def analyze_column(
         else None
     )
 
+    normalized_role = (
+        role.strip().lower()
+        if role
+        else None
+    )
+
     result = {
         "column": column_name,
         "technical_type": technical_type,
         "semantic_type": semantic_type,
+        "role": role,
+        "included": included,
         "routing": None,
         "distribution": None,
         "outliers": None,
         "temporal": None,
     }
 
-    if normalized_semantic_type in {
-        "date",
-        "datetime",
-        "timestamp",
-    }:
+    if not included:
+        result["routing"] = "excluded"
+        return result
+
+    if normalized_role == "identifier":
+        result["routing"] = "identifier"
+        return result
+
+    if normalized_role == "provenance":
+        result["routing"] = "provenance"
+        return result
+
+    if (
+        normalized_role == "time_axis"
+        or normalized_semantic_type in {
+            "date",
+             "datetime",
+             "timestamp",
+        }
+    ):
         result["routing"] = "temporal"
 
         result["temporal"] = {
