@@ -175,6 +175,44 @@ export type DataExpectation = {
     origin: MetadataOrigin;
 };
 
+export type AnalysisColumnRole =
+    | "target"
+    | "feature"
+    | "identifier"
+    | "time_axis"
+    | "grouping"
+    | "context"
+    | "provenance";
+
+export type AnalysisScopeOrigin = Extract<
+    MetadataOrigin,
+    "user" | "rawsight" | "ai"
+>;
+
+export type AnalysisScopeDecisionStatus =
+    | "confirmed"
+    | "suggested";
+
+export type AnalysisScopeColumn = {
+    columnName: string;
+
+    included: boolean;
+
+    role?: AnalysisColumnRole;
+
+    origin: AnalysisScopeOrigin;
+
+    decisionStatus: AnalysisScopeDecisionStatus;
+
+    confidence?: number;
+};
+
+export type AnalysisScope = {
+    columns: AnalysisScopeColumn[];
+
+    updatedAt: string;
+};
+
 export type DatasetAnalysisState = {
     light: {
         status: AnalysisStatus;
@@ -218,7 +256,7 @@ export type RawsightDataset = {
     structure?: DatasetStructure;
 
     metadata: DatasetMetadata;
-
+    analysisScope?: AnalysisScope;
     expectations: DataExpectation[];
 
     analysis: DatasetAnalysisState;

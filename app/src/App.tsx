@@ -3,7 +3,10 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import type { RawsightProject } from "./types/project";
+import type {
+  AnalysisColumnRole,
+  RawsightProject,
+} from "./types/project";
 import "./App.css";
 
 type FileInfo = {
@@ -84,6 +87,7 @@ type ProjectSection =
   | "overview"
   | "data"
   | "metadata"
+  | "lineup"
   | "analysis"
   | "history";
 
@@ -579,6 +583,175 @@ function App() {
       setError(`Could not save column description: ${String(err)}`);
     }
   }
+  async function toggleAnalysisScopeColumn(
+    columnName: string,
+  ) {
+    if (!activeProject) {
+      return;
+    }
+
+    const now = new Date().toISOString();
+
+    const updatedProject: RawsightProject = {
+      ...activeProject,
+      updatedAt: now,
+
+      datasets: activeProject.datasets.map((dataset) => {
+        if (dataset.id !== activeProject.activeDatasetId) {
+          return dataset;
+        }
+
+        const existingScopeColumn =
+          dataset.analysisScope?.columns.find(
+            (column) => column.columnName === columnName,
+          );
+
+        const currentlyIncluded =
+          existingScopeColumn?.included ?? true;
+
+        const updatedScopeColumn = existingScopeColumn
+          ? {
+            ...existingScopeColumn,
+            included: !currentlyIncluded,
+            origin: "user" as const,
+            decisionStatus: "confirmed" as const,
+          }
+          : {
+            columnName,
+            included: false,
+            origin: "user" as const,
+            decisionStatus: "confirmed" as const,
+          };
+
+        const existingScopeColumns =
+          dataset.analysisScope?.columns ?? [];
+
+        return {
+          ...dataset,
+          updatedAt: now,
+
+          analysisScope: {
+            columns: existingScopeColumn
+              ? existingScopeColumns.map((column) =>
+                column.columnName === columnName
+                  ? updatedScopeColumn
+                  : column,
+              )
+              : [
+                ...existingScopeColumns,
+                updatedScopeColumn,
+              ],
+
+            updatedAt: now,
+          },
+        };
+      }),
+    };
+
+    try {
+      await invoke<string>("save_project_json", {
+        projectId: updatedProject.id,
+        projectJson: JSON.stringify(
+          updatedProject,
+          null,
+          2,
+        ),
+        projectRoot:
+          appSettings?.defaultProjectRoot ?? null,
+      });
+
+      setActiveProject(updatedProject);
+      setError(null);
+    } catch (err) {
+      setError(
+        `Could not update The Lineup: ${String(err)}`,
+      );
+    }
+  }
+  async function setAnalysisScopeColumnRole(
+    columnName: string,
+    role: AnalysisColumnRole,
+  ) {
+    if (!activeProject) {
+      return;
+    }
+
+    const now = new Date().toISOString();
+
+    const updatedProject: RawsightProject = {
+      ...activeProject,
+      updatedAt: now,
+
+      datasets: activeProject.datasets.map((dataset) => {
+        if (dataset.id !== activeProject.activeDatasetId) {
+          return dataset;
+        }
+
+        const existingScopeColumn =
+          dataset.analysisScope?.columns.find(
+            (column) => column.columnName === columnName,
+          );
+
+        const updatedScopeColumn = existingScopeColumn
+          ? {
+            ...existingScopeColumn,
+            role,
+            origin: "user" as const,
+            decisionStatus: "confirmed" as const,
+          }
+          : {
+            columnName,
+            included: true,
+            role,
+            origin: "user" as const,
+            decisionStatus: "confirmed" as const,
+          };
+
+        const existingScopeColumns =
+          dataset.analysisScope?.columns ?? [];
+
+        return {
+          ...dataset,
+          updatedAt: now,
+
+          analysisScope: {
+            columns: existingScopeColumn
+              ? existingScopeColumns.map((column) =>
+                column.columnName === columnName
+                  ? updatedScopeColumn
+                  : column,
+              )
+              : [
+                ...existingScopeColumns,
+                updatedScopeColumn,
+              ],
+
+            updatedAt: now,
+          },
+        };
+      }),
+    };
+
+    try {
+      await invoke<string>("save_project_json", {
+        projectId: updatedProject.id,
+        projectJson: JSON.stringify(
+          updatedProject,
+          null,
+          2,
+        ),
+        projectRoot:
+          appSettings?.defaultProjectRoot ?? null,
+      });
+
+      setActiveProject(updatedProject);
+      setError(null);
+    } catch (err) {
+      setError(
+        `Could not update column role: ${String(err)}`,
+      );
+    }
+  }
   async function runLightAnalysis() {
     if (!fileInfo) {
       return;
@@ -896,6 +1069,14 @@ function App() {
 
                 <button
                   type="button"
+                  onClick={() => setActiveSection("lineup")}
+                  className={activeSection === "lineup" ? "active" : ""}
+                >
+                  The Lineup
+                </button>
+
+                <button
+                  type="button"
                   onClick={() => setActiveSection("analysis")}
                   className={activeSection === "analysis" ? "active" : ""}
                 >
@@ -917,6 +1098,7 @@ function App() {
                 <div className="workspace-section-label">
                   {activeSection === "overview" && "Overview"}
                   {activeSection === "data" && "Data"}
+                  {activeSection === "lineup" && "The Lineup"}
                   {activeSection === "metadata" && "Metadata"}
                   {activeSection === "analysis" && "Light Analysis"}
                   {activeSection === "history" && "History"}
@@ -949,7 +1131,92 @@ function App() {
                     </button>
                   </div>
                 )}
+                {activeSection === "lineup" && (
+                  <div className="metadata-workspace">
+                    <div className="metadata-header">
+                      <div>
+                        <strong>The Lineup</strong>
+                        <p>
+                          Choose which columns matter for the analysis.
+                          Your source data is never changed.
+                        </p>
+                      </div>
+                    </div>
+
+                    {(() => {
+                      const activeDataset = activeProject.datasets.find(
+                        (dataset) =>
+                          dataset.id === activeProject.activeDatasetId,
+                      );
+
+                      const columns =
+                        activeDataset?.structure?.columns ?? [];
+
+                      if (columns.length === 0) {
+                        return (
+                          <p>
+                            No observed column structure available.
+                          </p>
+                        );
+                      }
+
+                      return (
+                        <div className="column-metadata-list">
+                          {columns.map((column) => {
+                            const scopeColumn =
+                              activeDataset?.analysisScope?.columns.find(
+                                (scopeColumn) =>
+                                  scopeColumn.columnName === column.name,
+                              );
+
+                            const included =
+                              scopeColumn?.included ?? true;
+
+                            return (
+                              <div
+                                key={column.name}
+                                className="column-metadata-row"
+                              >
+                                <strong>{column.name}</strong>
+
+                                <span>{column.technicalType}</span>
+                                <select
+                                  value={scopeColumn?.role ?? ""}
+                                  disabled={!included}
+                                  onChange={(event) =>
+                                    setAnalysisScopeColumnRole(
+                                      column.name,
+                                      event.target.value as AnalysisColumnRole,
+                                    )
+                                  }
+                                >
+                                  <option value="">Select role...</option>
+                                  <option value="target">Target</option>
+                                  <option value="feature">Feature</option>
+                                  <option value="identifier">Identifier</option>
+                                  <option value="time_axis">Time axis</option>
+                                  <option value="grouping">Grouping</option>
+                                  <option value="context">Context</option>
+                                  <option value="provenance">Provenance</option>
+                                </select>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    toggleAnalysisScopeColumn(column.name)
+                                  }
+                                >
+                                  {included ? "Included" : "Excluded"}
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
                 {activeSection === "metadata" && (
+
                   <div className="metadata-workspace">
                     <div className="metadata-header">
                       <div>
