@@ -10,7 +10,10 @@ export function toEChartsOption(
     spec: VisualizationSpec,
     data: VisualizationData,
 ): EChartsOption {
-    if (spec.chartType !== "scatter") {
+    if (
+        spec.chartType !== "scatter" &&
+        spec.chartType !== "line"
+    ) {
         throw new Error(
             `Unsupported visualization type: ${spec.chartType}`,
         );
@@ -18,28 +21,14 @@ export function toEChartsOption(
 
     if (!spec.xColumn || !spec.yColumn) {
         throw new Error(
-            "Scatter visualization requires both xColumn and yColumn.",
+            `${spec.chartType} visualization requires both xColumn and yColumn.`,
         );
     }
 
     const xColumn = spec.xColumn;
     const yColumn = spec.yColumn;
 
-    const points = data.rows.flatMap((row) => {
-        const x = row[xColumn];
-        const y = row[yColumn];
-
-        if (
-            typeof x !== "number" ||
-            typeof y !== "number"
-        ) {
-            return [];
-        }
-
-        return [[x, y]];
-    });
-
-    return {
+    const commonOption: EChartsOption = {
         backgroundColor: rawsightChartTheme.background,
 
         title: {
@@ -71,37 +60,6 @@ export function toEChartsOption(
             containLabel: true,
         },
 
-        xAxis: {
-            type: "value",
-            name: xColumn,
-            nameLocation: "middle",
-            nameGap: 32,
-
-            axisLine: {
-                lineStyle: {
-                    color: rawsightChartTheme.axisLine,
-                },
-            },
-
-            axisTick: {
-                show: false,
-            },
-
-            axisLabel: {
-                color: rawsightChartTheme.mutedText,
-            },
-
-            splitLine: {
-                lineStyle: {
-                    color: rawsightChartTheme.gridLine,
-                },
-            },
-
-            nameTextStyle: {
-                color: rawsightChartTheme.mutedText,
-            },
-        },
-
         yAxis: {
             type: "value",
             name: yColumn,
@@ -130,16 +88,157 @@ export function toEChartsOption(
                 color: rawsightChartTheme.mutedText,
             },
         },
+    };
+
+    if (spec.chartType === "scatter") {
+        const points = data.rows.flatMap((row) => {
+            const x = row[xColumn];
+            const y = row[yColumn];
+
+            if (
+                typeof x !== "number" ||
+                typeof y !== "number"
+            ) {
+                return [];
+            }
+
+            return [[x, y]];
+        });
+
+        return {
+            ...commonOption,
+
+            xAxis: {
+                type: "value",
+                name: xColumn,
+                nameLocation: "middle",
+                nameGap: 32,
+
+                axisLine: {
+                    lineStyle: {
+                        color: rawsightChartTheme.axisLine,
+                    },
+                },
+
+                axisTick: {
+                    show: false,
+                },
+
+                axisLabel: {
+                    color: rawsightChartTheme.mutedText,
+                },
+
+                splitLine: {
+                    lineStyle: {
+                        color: rawsightChartTheme.gridLine,
+                    },
+                },
+
+                nameTextStyle: {
+                    color: rawsightChartTheme.mutedText,
+                },
+            },
+
+            series: [
+                {
+                    type: "scatter",
+                    data: points,
+                    symbolSize: 10,
+
+                    itemStyle: {
+                        color: rawsightChartTheme.primary,
+                        opacity: 0.85,
+                    },
+
+                    emphasis: {
+                        scale: 1.2,
+                        itemStyle: {
+                            color: rawsightChartTheme.emphasis,
+                        },
+                    },
+                },
+            ],
+        };
+    }
+
+    const lineRows = data.rows.flatMap((row) => {
+        const x = row[xColumn];
+        const y = row[yColumn];
+
+        if (
+            (typeof x !== "string" &&
+                typeof x !== "number") ||
+            typeof y !== "number"
+        ) {
+            return [];
+        }
+
+        return [
+            {
+                x: String(x),
+                y,
+            },
+        ];
+    });
+
+    return {
+        ...commonOption,
+
+        tooltip: {
+            ...commonOption.tooltip,
+            trigger: "axis",
+        },
+
+        xAxis: {
+            type: "time",
+            name: xColumn,
+            nameLocation: "middle",
+            nameGap: 32,
+
+
+
+            axisLine: {
+                lineStyle: {
+                    color: rawsightChartTheme.axisLine,
+                },
+            },
+
+            axisTick: {
+                show: false,
+            },
+
+            axisLabel: {
+                color: rawsightChartTheme.mutedText,
+            },
+
+            splitLine: {
+                show: false,
+            },
+
+            nameTextStyle: {
+                color: rawsightChartTheme.mutedText,
+            },
+        },
 
         series: [
             {
-                type: "scatter",
-                data: points,
-                symbolSize: 10,
+                type: "line",
+                data: lineRows.map((row) => [
+                    row.x,
+                    row.y,
+                ]),
+
+                showSymbol: true,
+                symbolSize: 7,
+                smooth: false,
+
+                lineStyle: {
+                    color: rawsightChartTheme.primary,
+                    width: 2,
+                },
 
                 itemStyle: {
                     color: rawsightChartTheme.primary,
-                    opacity: 0.85,
                 },
 
                 emphasis: {

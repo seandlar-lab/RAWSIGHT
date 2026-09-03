@@ -9,7 +9,7 @@ import type {
 } from "../types/visualization";
 
 type SelectedPoint = {
-    current: number;
+    timestamp: string;
     temperature: number;
 };
 
@@ -18,21 +18,21 @@ export function VisualizationDemo() {
         useState<SelectedPoint | null>(null);
 
     const spec: VisualizationSpec = {
-        chartType: "scatter",
-        title: "Current vs Temperature",
-        xColumn: "Current",
+        chartType: "line",
+        title: "Temperature over time",
+        xColumn: "Timestamp",
         yColumn: "Temperature",
     };
 
     const data: VisualizationData = {
         rows: [
-            { Current: 10.2, Temperature: 42.1 },
-            { Current: 11.4, Temperature: 43.8 },
-            { Current: 12.1, Temperature: 45.2 },
-            { Current: 13.7, Temperature: 47.4 },
-            { Current: 14.2, Temperature: 48.1 },
-            { Current: 15.8, Temperature: 52.3 },
-            { Current: 17.1, Temperature: 55.0 },
+            { Timestamp: "2026-09-03T08:00:00", Temperature: 42.1 },
+            { Timestamp: "2026-09-03T08:15:00", Temperature: 42.8 },
+            { Timestamp: "2026-09-03T09:00:00", Temperature: 43.2 },
+            { Timestamp: "2026-09-03T10:30:00", Temperature: 44.7 },
+            { Timestamp: "2026-09-03T12:00:00", Temperature: 46.1 },
+            { Timestamp: "2026-09-03T12:20:00", Temperature: 49.3 },
+            { Timestamp: "2026-09-03T14:00:00", Temperature: 52.7 },
         ],
     };
 
@@ -42,18 +42,24 @@ export function VisualizationDemo() {
     );
 
     function handlePointClick(
-        clickedData: unknown,
+        _clickedData: unknown,
         dataIndex: number,
     ) {
+        const sourceRow = data.rows[dataIndex];
+
+        if (!sourceRow) {
+            return;
+        }
+
+        const timestamp = sourceRow.Timestamp;
+        const temperature = sourceRow.Temperature;
+
         if (
-            !Array.isArray(clickedData) ||
-            clickedData.length < 2 ||
-            typeof clickedData[0] !== "number" ||
-            typeof clickedData[1] !== "number"
+            typeof timestamp !== "string" ||
+            typeof temperature !== "number"
         ) {
             return;
         }
-        const sourceRow = data.rows[dataIndex];
 
         console.log(
             "RAWSIGHT selected source row:",
@@ -61,8 +67,8 @@ export function VisualizationDemo() {
         );
 
         setSelectedPoint({
-            current: clickedData[0],
-            temperature: clickedData[1],
+            timestamp,
+            temperature,
         });
     }
 
@@ -84,7 +90,7 @@ export function VisualizationDemo() {
                     <strong>Selected point</strong>
 
                     <div>
-                        Current: {selectedPoint.current}
+                        Timestamp: {selectedPoint.timestamp}
                     </div>
 
                     <div>

@@ -90,6 +90,7 @@ type ProjectSection =
   | "metadata"
   | "lineup"
   | "analysis"
+  | "raw_analysis"
   | "history";
 
 function formatFileSize(bytes: number): string {
@@ -1086,6 +1087,14 @@ function App() {
 
                 <button
                   type="button"
+                  onClick={() => setActiveSection("raw_analysis")}
+                  className={activeSection === "raw_analysis" ? "active" : ""}
+                >
+                  Raw Analysis
+                </button>
+
+                <button
+                  type="button"
                   onClick={() => setActiveSection("history")}
                   className={activeSection === "history" ? "active" : ""}
                 >
@@ -1102,6 +1111,7 @@ function App() {
                   {activeSection === "lineup" && "The Lineup"}
                   {activeSection === "metadata" && "Metadata"}
                   {activeSection === "analysis" && "Light Analysis"}
+                  {activeSection === "raw_analysis" && "Raw Analysis"}
                   {activeSection === "history" && "History"}
                 </div>
 
@@ -1132,14 +1142,13 @@ function App() {
                     </button>
                   </div>
                 )}
-                {activeSection === "lineup" && (
+                {activeSection === "raw_analysis" && (
                   <div className="metadata-workspace">
                     <div className="metadata-header">
                       <div>
-                        <strong>The Lineup</strong>
+                        <strong>Raw Analysis</strong>
                         <p>
-                          Choose which columns matter for the analysis.
-                          Your source data is never changed.
+                          Explore deterministic findings and visualizations from your data.
                         </p>
                       </div>
                     </div>
@@ -1152,6 +1161,20 @@ function App() {
                     >
                       <VisualizationDemo />
                     </div>
+                  </div>
+                )}
+                {activeSection === "lineup" && (
+                  <div className="metadata-workspace">
+                    <div className="metadata-header">
+                      <div>
+                        <strong>The Lineup</strong>
+                        <p>
+                          Choose which columns matter for the analysis.
+                          Your source data is never changed.
+                        </p>
+                      </div>
+                    </div>
+
 
                     {(() => {
                       const activeDataset = activeProject.datasets.find(
