@@ -42,10 +42,19 @@ export function VisualizationDemo() {
     );
 
     function handlePointClick(
-        _clickedData: unknown,
-        dataIndex: number,
+        clickedData: unknown,
+        _dataIndex: number,
     ) {
-        const sourceRow = data.rows[dataIndex];
+        if (
+            !Array.isArray(clickedData) ||
+            clickedData.length < 3 ||
+            typeof clickedData[2] !== "number"
+        ) {
+            return;
+        }
+
+        const sourceRowIndex = clickedData[2];
+        const sourceRow = data.rows[sourceRowIndex];
 
         if (!sourceRow) {
             return;

@@ -91,7 +91,7 @@ export function toEChartsOption(
     };
 
     if (spec.chartType === "scatter") {
-        const points = data.rows.flatMap((row) => {
+        const points = data.rows.flatMap((row, sourceRowIndex) => {
             const x = row[xColumn];
             const y = row[yColumn];
 
@@ -102,7 +102,7 @@ export function toEChartsOption(
                 return [];
             }
 
-            return [[x, y]];
+            return [[x, y, sourceRowIndex]];
         });
 
         return {
@@ -143,6 +143,11 @@ export function toEChartsOption(
                 {
                     type: "scatter",
                     data: points,
+                    encode: {
+                        x: 0,
+                        y: 1,
+                        tooltip: [0, 1],
+                    },
                     symbolSize: 10,
 
                     itemStyle: {
@@ -161,7 +166,7 @@ export function toEChartsOption(
         };
     }
 
-    const lineRows = data.rows.flatMap((row) => {
+    const lineRows = data.rows.flatMap((row, sourceRowIndex) => {
         const x = row[xColumn];
         const y = row[yColumn];
 
@@ -177,6 +182,7 @@ export function toEChartsOption(
             {
                 x: String(x),
                 y,
+                sourceRowIndex,
             },
         ];
     });
@@ -226,7 +232,14 @@ export function toEChartsOption(
                 data: lineRows.map((row) => [
                     row.x,
                     row.y,
+                    row.sourceRowIndex,
                 ]),
+
+                encode: {
+                    x: 0,
+                    y: 1,
+                    tooltip: [0, 1],
+                },
 
                 showSymbol: true,
                 symbolSize: 7,
