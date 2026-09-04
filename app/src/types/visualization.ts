@@ -49,3 +49,17 @@ export type VisualizationRow = Record<
 export type VisualizationData = {
     rows: VisualizationRow[];
 };
+
+export type VisualizationRowInteraction = {
+    kind: "row";
+    sourceRowIndex: number;
+};
+
+export type VisualizationRowSetInteraction = {
+    kind: "row_set";
+    sourceRowIndices: number[];
+};
+
+export type VisualizationInteraction =
+    | VisualizationRowInteraction
+    | VisualizationRowSetInteraction;

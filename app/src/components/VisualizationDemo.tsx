@@ -1,13 +1,11 @@
 import { useState } from "react";
 
-import {
-    RawsightChart,
-    type RawsightChartPointClick,
-} from "./RawsightChart";
+import { RawsightChart } from "./RawsightChart";
 import { toEChartsOption } from "../visualization/toEChartsOption";
 
 import type {
     VisualizationData,
+    VisualizationInteraction,
     VisualizationSpec,
 } from "../types/visualization";
 
@@ -42,11 +40,15 @@ export function VisualizationDemo() {
         data,
     );
 
-    function handlePointClick(
-        event: RawsightChartPointClick,
+    function handleInteraction(
+        interaction: VisualizationInteraction,
     ) {
+        if (interaction.kind !== "row") {
+            return;
+        }
+
         const sourceRow =
-            data.rows[event.sourceRowIndex];
+            data.rows[interaction.sourceRowIndex];
 
         if (!sourceRow) {
             return;
@@ -64,7 +66,7 @@ export function VisualizationDemo() {
             <RawsightChart
                 option={option}
                 height={420}
-                onPointClick={handlePointClick}
+                onInteraction={handleInteraction}
             />
 
             {selectedSourceRow && (

@@ -1,24 +1,21 @@
 import { useEffect, useRef } from "react";
 import * as echarts from "echarts";
 import type { EChartsOption } from "echarts";
-
-export type RawsightChartPointClick = {
-    sourceRowIndex: number;
-};
+import type { VisualizationInteraction } from "../types/visualization";
 
 type RawsightChartProps = {
     option: EChartsOption;
     height?: number;
 
-    onPointClick?: (
-        event: RawsightChartPointClick,
+    onInteraction?: (
+        interaction: VisualizationInteraction,
     ) => void;
 };
 
 export function RawsightChart({
     option,
     height = 360,
-    onPointClick,
+    onInteraction,
 }: RawsightChartProps) {
     const containerRef =
         useRef<HTMLDivElement | null>(null);
@@ -26,12 +23,12 @@ export function RawsightChart({
     const chartRef =
         useRef<echarts.ECharts | null>(null);
 
-    const onPointClickRef =
-        useRef(onPointClick);
+    const onInteractionRef =
+        useRef(onInteraction);
 
     useEffect(() => {
-        onPointClickRef.current = onPointClick;
-    }, [onPointClick]);
+        onInteractionRef.current = onInteraction;
+    }, [onInteraction]);
 
     useEffect(() => {
         if (!containerRef.current) {
@@ -56,7 +53,8 @@ export function RawsightChart({
                 return;
             }
 
-            onPointClickRef.current?.({
+            onInteractionRef.current?.({
+                kind: "row",
                 sourceRowIndex: chartData[2],
             });
         };
