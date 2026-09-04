@@ -1,6 +1,9 @@
 import { useState } from "react";
 
-import { RawsightChart } from "./RawsightChart";
+import {
+    RawsightChart,
+    type RawsightChartPointClick,
+} from "./RawsightChart";
 import { toEChartsOption } from "../visualization/toEChartsOption";
 
 import type {
@@ -42,19 +45,10 @@ export function VisualizationDemo() {
     );
 
     function handlePointClick(
-        clickedData: unknown,
-        _dataIndex: number,
+        event: RawsightChartPointClick,
     ) {
-        if (
-            !Array.isArray(clickedData) ||
-            clickedData.length < 3 ||
-            typeof clickedData[2] !== "number"
-        ) {
-            return;
-        }
-
-        const sourceRowIndex = clickedData[2];
-        const sourceRow = data.rows[sourceRowIndex];
+        const sourceRow =
+            data.rows[event.sourceRowIndex];
 
         if (!sourceRow) {
             return;
@@ -80,7 +74,6 @@ export function VisualizationDemo() {
             temperature,
         });
     }
-
     return (
         <div>
             <RawsightChart
