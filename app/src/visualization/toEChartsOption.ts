@@ -238,8 +238,9 @@ export function toEChartsOption(
                 encode: {
                     x: 0,
                     y: 1,
-                    tooltip: [0, 1],
+                    tooltip: [1],
                 },
+                name: yColumn,
 
                 showSymbol: true,
                 symbolSize: 7,

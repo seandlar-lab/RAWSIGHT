@@ -11,14 +11,12 @@ import type {
     VisualizationSpec,
 } from "../types/visualization";
 
-type SelectedPoint = {
-    timestamp: string;
-    temperature: number;
-};
 
 export function VisualizationDemo() {
-    const [selectedPoint, setSelectedPoint] =
-        useState<SelectedPoint | null>(null);
+    const [selectedSourceRow, setSelectedSourceRow] =
+        useState<VisualizationData["rows"][number] | null>(
+            null,
+        );
 
     const spec: VisualizationSpec = {
         chartType: "line",
@@ -54,25 +52,12 @@ export function VisualizationDemo() {
             return;
         }
 
-        const timestamp = sourceRow.Timestamp;
-        const temperature = sourceRow.Temperature;
-
-        if (
-            typeof timestamp !== "string" ||
-            typeof temperature !== "number"
-        ) {
-            return;
-        }
-
         console.log(
             "RAWSIGHT selected source row:",
             sourceRow,
         );
 
-        setSelectedPoint({
-            timestamp,
-            temperature,
-        });
+        setSelectedSourceRow(sourceRow);
     }
     return (
         <div>
@@ -82,22 +67,22 @@ export function VisualizationDemo() {
                 onPointClick={handlePointClick}
             />
 
-            {selectedPoint && (
+            {selectedSourceRow && (
                 <div
                     style={{
                         marginTop: "12px",
                         fontSize: "14px",
                     }}
                 >
-                    <strong>Selected point</strong>
+                    <strong>Source row</strong>
 
-                    <div>
-                        Timestamp: {selectedPoint.timestamp}
-                    </div>
-
-                    <div>
-                        Temperature: {selectedPoint.temperature}
-                    </div>
+                    {Object.entries(selectedSourceRow).map(
+                        ([columnName, value]) => (
+                            <div key={columnName}>
+                                {columnName}: {String(value)}
+                            </div>
+                        ),
+                    )}
                 </div>
             )}
         </div>
