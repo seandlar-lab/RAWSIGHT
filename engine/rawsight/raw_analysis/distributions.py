@@ -53,6 +53,135 @@ def is_categorical_type(technical_type: str) -> bool:
         or normalized.startswith("ENUM")
     )
 
+def analyze_numeric_histogram(
+    connection: duckdb.DuckDBPyConnection,
+    relation: duckdb.DuckDBPyRelation,
+    column_name: str,
+    bin_count: int = 20,
+) -> list[dict]:
+    if bin_count < 1:
+        raise ValueError(
+            "bin_count must be at least 1"
+        )
+
+    if column_name not in relation.columns:
+        raise ValueError(
+            f"Column not found: {column_name}"
+        )
+
+    column_index = relation.columns.index(column_name)
+    technical_type = str(relation.types[column_index])
+
+    if not is_numeric_type(technical_type):
+        raise ValueError(
+            f"Column is not numeric: "
+            f"{column_name} ({technical_type})"
+        )
+
+    relation.create_view(
+        "rawsight_histogram_source",
+        replace=True,
+    )
+
+    column = quote_identifier(column_name)
+
+    minimum, maximum = connection.execute(
+        f"""
+        SELECT
+            MIN({column}),
+            MAX({column})
+        FROM rawsight_histogram_source
+        WHERE {column} IS NOT NULL
+        """
+    ).fetchone()
+
+    if minimum is None or maximum is None:
+        return []
+
+    minimum = float(minimum)
+    maximum = float(maximum)
+
+    if minimum == maximum:
+        count = connection.execute(
+            f"""
+            SELECT COUNT({column})
+            FROM rawsight_histogram_source
+            """
+        ).fetchone()[0]
+
+        return [
+            {
+                "lower_bound": minimum,
+                "upper_bound": maximum,
+                "count": count,
+            }
+        ]
+
+    bin_width = (
+        maximum - minimum
+    ) / bin_count
+
+    rows = connection.execute(
+        f"""
+        SELECT
+            LEAST(
+                ? - 1,
+                CAST(
+                    FLOOR(
+                        (
+                            CAST({column} AS DOUBLE) - ?
+                        ) / ?
+                    )
+                    AS INTEGER
+                )
+            ) AS bin_index,
+            COUNT(*) AS count
+        FROM rawsight_histogram_source
+        WHERE {column} IS NOT NULL
+        GROUP BY bin_index
+        ORDER BY bin_index
+        """,
+        [
+            bin_count,
+            minimum,
+            bin_width,
+        ],
+    ).fetchall()
+
+    counts = {
+        bin_index: count
+        for bin_index, count in rows
+    }
+
+    bins = []
+
+    for bin_index in range(bin_count):
+        lower_bound = (
+            minimum
+            + bin_index * bin_width
+        )
+
+        upper_bound = (
+            minimum
+            + (bin_index + 1) * bin_width
+        )
+
+        if bin_index == bin_count - 1:
+            upper_bound = maximum
+
+        bins.append(
+            {
+                "lower_bound": lower_bound,
+                "upper_bound": upper_bound,
+                "count": counts.get(
+                    bin_index,
+                    0,
+                ),
+            }
+        )
+
+    return bins
+
 def analyze_numeric_distribution(
     connection: duckdb.DuckDBPyConnection,
     relation: duckdb.DuckDBPyRelation,
@@ -132,7 +261,11 @@ def analyze_numeric_distribution(
         if q1 is not None and q3 is not None
         else None
     )
-
+    histogram_bins = analyze_numeric_histogram(
+        connection,
+        relation,
+        column_name,
+    )
     return {
         "column": column_name,
         "technical_type": technical_type,
@@ -152,6 +285,7 @@ def analyze_numeric_distribution(
         "iqr": json_safe(iqr),
         "zero_count": zero_count,
         "negative_count": negative_count,
+        "histogram_bins": histogram_bins,
     }
 def analyze_categorical_distribution(
     connection: duckdb.DuckDBPyConnection,
@@ -237,7 +371,6 @@ def analyze_categorical_distribution(
         if top_values
         else None
     )
-
     return {
         "column": column_name,
         "technical_type": technical_type,
