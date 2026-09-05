@@ -66,6 +66,7 @@ export function VisualizationDemo() {
             <RawsightChart
                 option={option}
                 height={420}
+                interactions={data.interactions}
                 onInteraction={handleInteraction}
             />
 

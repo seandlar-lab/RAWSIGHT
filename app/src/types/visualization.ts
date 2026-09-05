@@ -46,8 +46,18 @@ export type VisualizationRow = Record<
     VisualizationValue
 >;
 
+export type VisualizationHistogramBin = {
+    label: string;
+    lowerBound: number;
+    upperBound: number;
+    count: number;
+    sourceRowIndices: number[];
+};
+
 export type VisualizationData = {
     rows: VisualizationRow[];
+    histogramBins?: VisualizationHistogramBin[];
+    interactions?: VisualizationInteractionMap;
 };
 
 export type VisualizationRowInteraction = {
@@ -63,3 +73,10 @@ export type VisualizationRowSetInteraction = {
 export type VisualizationInteraction =
     | VisualizationRowInteraction
     | VisualizationRowSetInteraction;
+
+export type VisualizationInteractionId = string;
+
+export type VisualizationInteractionMap = Record<
+    VisualizationInteractionId,
+    VisualizationInteraction
+>;

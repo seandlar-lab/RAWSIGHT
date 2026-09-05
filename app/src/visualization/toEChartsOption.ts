@@ -12,7 +12,8 @@ export function toEChartsOption(
 ): EChartsOption {
     if (
         spec.chartType !== "scatter" &&
-        spec.chartType !== "line"
+        spec.chartType !== "line" &&
+        spec.chartType !== "histogram"
     ) {
         throw new Error(
             `Unsupported visualization type: ${spec.chartType}`,
@@ -22,6 +23,12 @@ export function toEChartsOption(
     if (!spec.xColumn || !spec.yColumn) {
         throw new Error(
             `${spec.chartType} visualization requires both xColumn and yColumn.`,
+        );
+    }
+
+    if (spec.chartType === "histogram") {
+        throw new Error(
+            "Histogram rendering is not implemented yet.",
         );
     }
 

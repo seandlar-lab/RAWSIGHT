@@ -1,11 +1,15 @@
 import { useEffect, useRef } from "react";
 import * as echarts from "echarts";
 import type { EChartsOption } from "echarts";
-import type { VisualizationInteraction } from "../types/visualization";
+import type {
+    VisualizationInteraction,
+    VisualizationInteractionMap,
+} from "../types/visualization";
 
 type RawsightChartProps = {
     option: EChartsOption;
     height?: number;
+    interactions?: VisualizationInteractionMap;
 
     onInteraction?: (
         interaction: VisualizationInteraction,
@@ -15,6 +19,7 @@ type RawsightChartProps = {
 export function RawsightChart({
     option,
     height = 360,
+    interactions,
     onInteraction,
 }: RawsightChartProps) {
     const containerRef =
@@ -29,6 +34,13 @@ export function RawsightChart({
     useEffect(() => {
         onInteractionRef.current = onInteraction;
     }, [onInteraction]);
+
+    const interactionsRef =
+        useRef(interactions);
+
+    useEffect(() => {
+        interactionsRef.current = interactions;
+    }, [interactions]);
 
     useEffect(() => {
         if (!containerRef.current) {
@@ -47,16 +59,51 @@ export function RawsightChart({
 
             if (
                 !Array.isArray(chartData) ||
-                chartData.length < 3 ||
-                typeof chartData[2] !== "number"
+                chartData.length < 3
             ) {
                 return;
             }
 
-            onInteractionRef.current?.({
-                kind: "row",
-                sourceRowIndex: chartData[2],
-            });
+            const sourceReference = chartData[2];
+
+            if (typeof sourceReference === "string") {
+                const interaction =
+                    interactionsRef.current?.[sourceReference];
+
+                if (interaction) {
+                    onInteractionRef.current?.(interaction);
+                }
+
+                return;
+            }
+
+            if (
+                typeof sourceReference === "number" &&
+                Number.isInteger(sourceReference) &&
+                sourceReference >= 0
+            ) {
+                onInteractionRef.current?.({
+                    kind: "row",
+                    sourceRowIndex: sourceReference,
+                });
+
+                return;
+            }
+
+            if (
+                Array.isArray(sourceReference) &&
+                sourceReference.every(
+                    (value) =>
+                        typeof value === "number" &&
+                        Number.isInteger(value) &&
+                        value >= 0,
+                )
+            ) {
+                onInteractionRef.current?.({
+                    kind: "row_set",
+                    sourceRowIndices: sourceReference,
+                });
+            }
         };
 
         chart.on(
