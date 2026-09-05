@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import { RawsightChart } from "./RawsightChart";
 import { toEChartsOption } from "../visualization/toEChartsOption";
+import { VisualizationSelectionPanel } from "./VisualizationSelectionPanel";
 
 import type {
     VisualizationData,
@@ -138,36 +139,10 @@ export function VisualizationDemo() {
                 onInteraction={handleInteraction}
             />
 
-            {selectedRowCount !== null && (
-                <div
-                    style={{
-                        marginTop: "12px",
-                        fontSize: "14px",
-                    }}
-                >
-                    <strong>Selected rows</strong>
-                    <div>{selectedRowCount} rows</div>
-                </div>
-            )}
-
-            {selectedSourceRow && (
-                <div
-                    style={{
-                        marginTop: "12px",
-                        fontSize: "14px",
-                    }}
-                >
-                    <strong>Source row</strong>
-
-                    {Object.entries(selectedSourceRow).map(
-                        ([columnName, value]) => (
-                            <div key={columnName}>
-                                {columnName}: {String(value)}
-                            </div>
-                        ),
-                    )}
-                </div>
-            )}
+            <VisualizationSelectionPanel
+                selectedRowCount={selectedRowCount}
+                selectedSourceRow={selectedSourceRow}
+            />
         </div>
     );
 }
