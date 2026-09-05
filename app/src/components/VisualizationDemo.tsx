@@ -17,21 +17,42 @@ export function VisualizationDemo() {
         );
 
     const spec: VisualizationSpec = {
-        chartType: "line",
-        title: "Temperature over time",
-        xColumn: "Timestamp",
-        yColumn: "Temperature",
+        chartType: "histogram",
+        title: "Temperature distribution",
+        xColumn: "Temperature",
     };
 
     const data: VisualizationData = {
-        rows: [
-            { Timestamp: "2026-09-03T08:00:00", Temperature: 42.1 },
-            { Timestamp: "2026-09-03T08:15:00", Temperature: 42.8 },
-            { Timestamp: "2026-09-03T09:00:00", Temperature: 43.2 },
-            { Timestamp: "2026-09-03T10:30:00", Temperature: 44.7 },
-            { Timestamp: "2026-09-03T12:00:00", Temperature: 46.1 },
-            { Timestamp: "2026-09-03T12:20:00", Temperature: 49.3 },
-            { Timestamp: "2026-09-03T14:00:00", Temperature: 52.7 },
+        rows: [],
+        histogramBins: [
+            {
+                label: "40–45",
+                lowerBound: 40,
+                upperBound: 45,
+                count: 18,
+                interactionId: "bin-0",
+            },
+            {
+                label: "45–50",
+                lowerBound: 45,
+                upperBound: 50,
+                count: 31,
+                interactionId: "bin-1",
+            },
+            {
+                label: "50–55",
+                lowerBound: 50,
+                upperBound: 55,
+                count: 22,
+                interactionId: "bin-2",
+            },
+            {
+                label: "55–60",
+                lowerBound: 55,
+                upperBound: 60,
+                count: 9,
+                interactionId: "bin-3",
+            },
         ],
     };
 

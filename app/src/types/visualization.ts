@@ -51,7 +51,7 @@ export type VisualizationHistogramBin = {
     lowerBound: number;
     upperBound: number;
     count: number;
-    sourceRowIndices: number[];
+    interactionId?: VisualizationInteractionId;
 };
 
 export type VisualizationData = {

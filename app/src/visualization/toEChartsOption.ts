@@ -20,18 +20,145 @@ export function toEChartsOption(
         );
     }
 
+    if (spec.chartType === "histogram") {
+        if (!spec.xColumn) {
+            throw new Error(
+                "Histogram visualization requires xColumn.",
+            );
+        }
+
+
+        const xColumn = spec.xColumn;
+        const bins = data.histogramBins ?? [];
+
+        return {
+            backgroundColor: rawsightChartTheme.background,
+
+            title: {
+                text: spec.title,
+                left: 0,
+                top: 0,
+                textStyle: {
+                    color: rawsightChartTheme.text,
+                    fontSize: 16,
+                    fontWeight: 600,
+                },
+            },
+
+            tooltip: {
+                trigger: "item",
+                backgroundColor: "#ffffff",
+                borderColor: rawsightChartTheme.axisLine,
+                borderWidth: 1,
+                textStyle: {
+                    color: rawsightChartTheme.text,
+                },
+            },
+
+            grid: {
+                left: 64,
+                right: 24,
+                top: 58,
+                bottom: 52,
+                containLabel: true,
+            },
+
+            xAxis: {
+                type: "category",
+                name: xColumn,
+                nameLocation: "middle",
+                nameGap: 32,
+
+                axisLine: {
+                    lineStyle: {
+                        color: rawsightChartTheme.axisLine,
+                    },
+                },
+
+                axisTick: {
+                    show: false,
+                },
+
+                axisLabel: {
+                    color: rawsightChartTheme.mutedText,
+                },
+
+                splitLine: {
+                    show: false,
+                },
+
+                nameTextStyle: {
+                    color: rawsightChartTheme.mutedText,
+                },
+            },
+
+            yAxis: {
+                type: "value",
+                name: "Count",
+                nameLocation: "middle",
+                nameGap: 42,
+
+                axisLine: {
+                    show: false,
+                },
+
+                axisTick: {
+                    show: false,
+                },
+
+                axisLabel: {
+                    color: rawsightChartTheme.mutedText,
+                },
+
+                splitLine: {
+                    lineStyle: {
+                        color: rawsightChartTheme.gridLine,
+                    },
+                },
+
+                nameTextStyle: {
+                    color: rawsightChartTheme.mutedText,
+                },
+            },
+
+            series: [
+                {
+                    type: "bar",
+                    name: "Count",
+
+                    data: bins.map((bin) => [
+                        bin.label,
+                        bin.count,
+                        bin.interactionId ?? "",
+                    ]),
+
+                    encode: {
+                        x: 0,
+                        y: 1,
+                        tooltip: [1],
+                    },
+
+                    barCategoryGap: "2%",
+
+                    itemStyle: {
+                        color: rawsightChartTheme.primary,
+                        opacity: 0.85,
+                    },
+
+                    emphasis: {
+                        itemStyle: {
+                            color: rawsightChartTheme.emphasis,
+                        },
+                    },
+                },
+            ],
+        };
+    }
     if (!spec.xColumn || !spec.yColumn) {
         throw new Error(
             `${spec.chartType} visualization requires both xColumn and yColumn.`,
         );
     }
-
-    if (spec.chartType === "histogram") {
-        throw new Error(
-            "Histogram rendering is not implemented yet.",
-        );
-    }
-
     const xColumn = spec.xColumn;
     const yColumn = spec.yColumn;
 
