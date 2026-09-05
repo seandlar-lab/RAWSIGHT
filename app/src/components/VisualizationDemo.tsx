@@ -14,7 +14,11 @@ export function VisualizationDemo() {
     const [selectedSourceRow, setSelectedSourceRow] =
         useState<VisualizationData["rows"][number] | null>(
             null,
+
         );
+
+    const [selectedRowCount, setSelectedRowCount] =
+        useState<number | null>(null);
 
     const spec: VisualizationSpec = {
         chartType: "histogram",
@@ -54,6 +58,39 @@ export function VisualizationDemo() {
                 interactionId: "bin-3",
             },
         ],
+        interactions: {
+            "bin-0": {
+                kind: "row_set",
+                sourceRowIndices: Array.from(
+                    { length: 18 },
+                    (_, index) => index,
+                ),
+            },
+
+            "bin-1": {
+                kind: "row_set",
+                sourceRowIndices: Array.from(
+                    { length: 31 },
+                    (_, index) => index + 18,
+                ),
+            },
+
+            "bin-2": {
+                kind: "row_set",
+                sourceRowIndices: Array.from(
+                    { length: 22 },
+                    (_, index) => index + 49,
+                ),
+            },
+
+            "bin-3": {
+                kind: "row_set",
+                sourceRowIndices: Array.from(
+                    { length: 9 },
+                    (_, index) => index + 71,
+                ),
+            },
+        },
     };
 
     const option = toEChartsOption(
@@ -64,9 +101,19 @@ export function VisualizationDemo() {
     function handleInteraction(
         interaction: VisualizationInteraction,
     ) {
+        if (interaction.kind === "row_set") {
+            setSelectedRowCount(
+                interaction.sourceRowIndices.length,
+            );
+            setSelectedSourceRow(null);
+            return;
+        }
+
         if (interaction.kind !== "row") {
             return;
         }
+
+        setSelectedRowCount(null);
 
         const sourceRow =
             data.rows[interaction.sourceRowIndex];
@@ -90,6 +137,18 @@ export function VisualizationDemo() {
                 interactions={data.interactions}
                 onInteraction={handleInteraction}
             />
+
+            {selectedRowCount !== null && (
+                <div
+                    style={{
+                        marginTop: "12px",
+                        fontSize: "14px",
+                    }}
+                >
+                    <strong>Selected rows</strong>
+                    <div>{selectedRowCount} rows</div>
+                </div>
+            )}
 
             {selectedSourceRow && (
                 <div
