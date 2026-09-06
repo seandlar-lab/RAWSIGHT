@@ -83,6 +83,7 @@ export function RawAnalysisVisualization({
                 (item) => ({
                     [result.column]: item.value,
                     Count: item.count,
+                    Share: item.percent_of_non_null,
                 }),
             ),
         };

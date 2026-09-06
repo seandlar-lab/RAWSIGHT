@@ -228,6 +228,7 @@ export function toEChartsOption(
         const bars = data.rows.flatMap((row) => {
             const x = row[xColumn];
             const y = row[yColumn];
+            const share = row["Share"];
 
             if (
                 (typeof x !== "string" &&
@@ -237,11 +238,58 @@ export function toEChartsOption(
                 return [];
             }
 
-            return [[String(x), y]];
+            return [[
+                String(x),
+                y,
+                "",
+                typeof share === "number"
+                    ? share
+                    : null,
+            ]];
         });
 
         return {
             ...commonOption,
+
+            tooltip: {
+                ...commonOption.tooltip,
+                trigger: "item",
+                renderMode: "richText",
+
+                formatter: (params) => {
+                    const item = Array.isArray(params)
+                        ? params[0]
+                        : params;
+
+                    const values =
+                        item && Array.isArray(item.value)
+                            ? item.value
+                            : [];
+
+                    const category =
+                        String(values[0] ?? "");
+
+                    const count = values[1];
+                    const share = values[3];
+
+                    const countText =
+                        typeof count === "number"
+                            ? count.toLocaleString()
+                            : String(count ?? "—");
+
+                    const shareText =
+                        typeof share === "number"
+                            ? `${share.toFixed(1)}%`
+                            : "—";
+
+                    return (
+                        `${category}\n` +
+                        `Count: ${countText}\n` +
+                        `Share: ${shareText}`
+                    );
+                },
+            },
+
 
             xAxis: {
                 type: "category",
