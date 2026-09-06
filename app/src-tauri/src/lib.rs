@@ -197,6 +197,103 @@ fn profile_dataset(app: AppHandle, path: String) -> Result<String, String> {
 }
 
 #[tauri::command(async)]
+fn raw_analysis_dataset(
+    path: String,
+    column: String,
+    role: Option<String>,
+) -> Result<String, String> {
+    let manifest_dir =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+
+    let project_root = manifest_dir
+        .parent()
+        .and_then(|path| path.parent())
+        .ok_or("Could not locate RAWSIGHT project root")?;
+
+    let python = project_root
+        .join(".venv")
+        .join("Scripts")
+        .join("python.exe");
+
+    let raw_analysis_script =
+        project_root
+            .join("engine")
+            .join("raw_analysis.py");
+
+    if !python.exists() {
+        return Err(format!(
+            "Python environment not found: {}",
+            python.display()
+        ));
+    }
+
+    if !raw_analysis_script.exists() {
+        return Err(format!(
+            "Raw Analysis engine not found: {}",
+            raw_analysis_script.display()
+        ));
+    }
+
+    let mut command = Command::new(&python);
+
+    command
+        .arg(&raw_analysis_script)
+        .arg(&path)
+        .arg(&column);
+
+    if let Some(role) = role {
+        if !role.trim().is_empty() {
+            command.arg(role);
+        }
+    }
+
+    let output = command
+        .output()
+        .map_err(|error| {
+            format!(
+                "Could not start Raw Analysis engine: {error}"
+            )
+        })?;
+
+    let stdout =
+        String::from_utf8_lossy(&output.stdout);
+
+    let stderr =
+        String::from_utf8_lossy(&output.stderr);
+
+    let mut result: Option<String> = None;
+    let mut engine_error: Option<String> = None;
+
+    for line in stdout.lines() {
+        if let Some(json) =
+            line.strip_prefix("RESULT\t")
+        {
+            result = Some(json.to_string());
+        } else if let Some(message) =
+            line.strip_prefix("ERROR\t")
+        {
+            engine_error = Some(message.to_string());
+        }
+    }
+
+    if !output.status.success() {
+        return Err(
+            engine_error.unwrap_or_else(|| {
+                if stderr.trim().is_empty() {
+                    "Raw Analysis failed".to_string()
+                } else {
+                    stderr.trim().to_string()
+                }
+            }),
+        );
+    }
+
+    result.ok_or_else(|| {
+        "Raw Analysis engine returned no result".to_string()
+    })
+}
+
+#[tauri::command(async)]
 fn inspect_rows(path: String, column: String, value: String, limit: u32) -> Result<String, String> {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
 
@@ -611,6 +708,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_file_info,
             profile_dataset,
+			raw_analysis_dataset,
             inspect_rows,
 			inspect_structure,
 			save_project_json,
