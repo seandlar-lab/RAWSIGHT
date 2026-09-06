@@ -31,6 +31,25 @@ export type NumericDistribution = {
     histogram_bins: NumericHistogramBin[];
 };
 
+export type CategoricalValueFrequency = {
+    value: string;
+    count: number;
+    percent_of_non_null: number;
+};
+
+export type CategoricalDistribution = {
+    column: string;
+    technical_type: string;
+
+    total_rows: number;
+    non_null_count: number;
+    null_count: number;
+    distinct_count: number;
+
+    dominant_value: CategoricalValueFrequency | null;
+    top_values: CategoricalValueFrequency[];
+};
+
 export type RawAnalysisColumnResult = {
     column: string;
     technical_type: string;
@@ -47,7 +66,11 @@ export type RawAnalysisColumnResult = {
     | "excluded"
     | "unsupported";
 
-    distribution: NumericDistribution | Record<string, unknown> | null;
+    distribution:
+    | NumericDistribution
+    | CategoricalDistribution
+    | Record<string, unknown>
+    | null;
     outliers: Record<string, unknown> | null;
     temporal: Record<string, unknown> | null;
 };
