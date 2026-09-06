@@ -92,11 +92,65 @@ export function RawAnalysisVisualization({
             data,
         );
 
+        const dominantValue =
+            distribution.dominant_value;
+
         return (
-            <RawsightChart
-                option={option}
-                height={420}
-            />
+            <div>
+                <div
+                    style={{
+                        display: "flex",
+                        gap: "28px",
+                        flexWrap: "wrap",
+                        marginBottom: "20px",
+                    }}
+                >
+                    <div>
+                        <div>
+                            <strong>Dominant value</strong>
+                        </div>
+                        <div>
+                            {dominantValue
+                                ? dominantValue.value
+                                : "—"}
+                        </div>
+                    </div>
+
+                    <div>
+                        <div>
+                            <strong>Share</strong>
+                        </div>
+                        <div>
+                            {dominantValue
+                                ? `${dominantValue.percent_of_non_null.toFixed(1)}%`
+                                : "—"}
+                        </div>
+                    </div>
+
+                    <div>
+                        <div>
+                            <strong>Distinct values</strong>
+                        </div>
+                        <div>
+                            {distribution.distinct_count.toLocaleString()}
+                        </div>
+                    </div>
+
+                    <div>
+                        <div>
+                            <strong>Missing</strong>
+                        </div>
+                        <div>
+                            {distribution.null_count.toLocaleString()}
+                        </div>
+                    </div>
+                </div>
+
+                <RawsightChart
+                    option={option}
+                    height={420}
+                />
+            </div>
         );
     }
 
