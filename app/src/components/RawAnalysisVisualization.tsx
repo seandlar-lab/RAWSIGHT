@@ -95,6 +95,12 @@ export function RawAnalysisVisualization({
 
         const dominantValue =
             distribution.dominant_value;
+        const shownValueCount =
+            distribution.top_values.length;
+
+        const hasMoreValues =
+            distribution.distinct_count >
+            shownValueCount;
 
         return (
             <div>
@@ -146,6 +152,18 @@ export function RawAnalysisVisualization({
                         </div>
                     </div>
                 </div>
+
+                {hasMoreValues && (
+                    <p
+                        style={{
+                            marginTop: "0",
+                            marginBottom: "16px",
+                        }}
+                    >
+                        Showing the {shownValueCount} most frequent values
+                        out of {distribution.distinct_count.toLocaleString()} distinct values.
+                    </p>
+                )}
 
                 <RawsightChart
                     option={option}
