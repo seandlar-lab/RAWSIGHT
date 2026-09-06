@@ -9,6 +9,7 @@ import type {
   RawsightProject,
 } from "./types/project";
 import "./App.css";
+import type { RawAnalysisColumnResult } from "./types/rawAnalysis";
 
 type FileInfo = {
   name: string;
@@ -158,6 +159,10 @@ function getColumnSignals(
 function App() {
   const [fileInfo, setFileInfo] = useState<FileInfo | null>(null);
   const [profile, setProfile] = useState<DatasetProfile | null>(null);
+  const [rawAnalysisResult, setRawAnalysisResult] =
+    useState<RawAnalysisColumnResult | null>(null);
+  const [rawAnalysisColumnName, setRawAnalysisColumnName] =
+    useState("");
 
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [progressMessage, setProgressMessage] =
@@ -782,6 +787,31 @@ function App() {
       setIsAnalyzing(false);
     }
   }
+  async function runRawAnalysisColumn(
+    column: string,
+    role?: AnalysisColumnRole,
+  ) {
+    if (!fileInfo) {
+      return null;
+    }
+
+    const rawResult = await invoke<string>(
+      "raw_analysis_dataset",
+      {
+        path: fileInfo.path,
+        column,
+        role: role ?? null,
+      },
+    );
+
+    const parsedResult = JSON.parse(
+      rawResult,
+    ) as RawAnalysisColumnResult;
+
+    setRawAnalysisResult(parsedResult);
+
+    return parsedResult;
+  }
   async function inspectDatasetStructure(path: string) {
     const rawStructure = await invoke<string>("inspect_structure", {
       path,
@@ -1153,14 +1183,99 @@ function App() {
                       </div>
                     </div>
 
-                    <div
-                      style={{
-                        marginTop: "24px",
-                        marginBottom: "24px",
-                      }}
-                    >
-                      <VisualizationDemo />
-                    </div>
+                    {(() => {
+                      const activeDataset = activeProject.datasets.find(
+                        (dataset) =>
+                          dataset.id === activeProject.activeDatasetId,
+                      );
+
+                      const columns =
+                        activeDataset?.structure?.columns ?? [];
+
+                      const scopeColumns =
+                        activeDataset?.analysisScope?.columns ?? [];
+
+                      if (columns.length === 0) {
+                        return (
+                          <p>
+                            No observed column structure available.
+                          </p>
+                        );
+                      }
+
+                      const selectedScopeColumn =
+                        scopeColumns.find(
+                          (column) =>
+                            column.columnName === rawAnalysisColumnName,
+                        );
+
+                      return (
+                        <>
+                          <div
+                            style={{
+                              marginTop: "24px",
+                              marginBottom: "24px",
+                            }}
+                          >
+                            <select
+                              value={rawAnalysisColumnName}
+                              onChange={(event) => {
+                                setRawAnalysisColumnName(
+                                  event.target.value,
+                                );
+                                setRawAnalysisResult(null);
+                              }}
+                            >
+                              <option value="">
+                                Choose a column
+                              </option>
+
+                              {columns.map((column) => (
+                                <option
+                                  key={column.name}
+                                  value={column.name}
+                                >
+                                  {column.name}
+                                </option>
+                              ))}
+                            </select>
+
+                            <button
+                              type="button"
+                              disabled={!rawAnalysisColumnName}
+                              onClick={() => {
+                                void runRawAnalysisColumn(
+                                  rawAnalysisColumnName,
+                                  selectedScopeColumn?.role,
+                                );
+                              }}
+                            >
+                              Run Raw Analysis
+                            </button>
+
+                            {rawAnalysisResult && (
+                              <p>
+                                Result:{" "}
+                                <strong>
+                                  {rawAnalysisResult.column}
+                                </strong>
+                                {" · "}
+                                {rawAnalysisResult.routing}
+                              </p>
+                            )}
+                          </div>
+
+                          <div
+                            style={{
+                              marginTop: "24px",
+                              marginBottom: "24px",
+                            }}
+                          >
+                            <VisualizationDemo />
+                          </div>
+                        </>
+                      );
+                    })()}
                   </div>
                 )}
                 {activeSection === "lineup" && (
