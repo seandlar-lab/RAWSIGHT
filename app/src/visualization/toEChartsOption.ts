@@ -13,7 +13,8 @@ export function toEChartsOption(
     if (
         spec.chartType !== "scatter" &&
         spec.chartType !== "line" &&
-        spec.chartType !== "histogram"
+        spec.chartType !== "histogram" &&
+        spec.chartType !== "bar"
     ) {
         throw new Error(
             `Unsupported visualization type: ${spec.chartType}`,
@@ -223,6 +224,83 @@ export function toEChartsOption(
             },
         },
     };
+    if (spec.chartType === "bar") {
+        const bars = data.rows.flatMap((row) => {
+            const x = row[xColumn];
+            const y = row[yColumn];
+
+            if (
+                (typeof x !== "string" &&
+                    typeof x !== "number") ||
+                typeof y !== "number"
+            ) {
+                return [];
+            }
+
+            return [[String(x), y]];
+        });
+
+        return {
+            ...commonOption,
+
+            xAxis: {
+                type: "category",
+                name: xColumn,
+                nameLocation: "middle",
+                nameGap: 36,
+
+                axisLine: {
+                    lineStyle: {
+                        color: rawsightChartTheme.axisLine,
+                    },
+                },
+
+                axisTick: {
+                    show: false,
+                },
+
+                axisLabel: {
+                    color: rawsightChartTheme.mutedText,
+                    interval: 0,
+                },
+
+                splitLine: {
+                    show: false,
+                },
+
+                nameTextStyle: {
+                    color: rawsightChartTheme.mutedText,
+                },
+            },
+
+            series: [
+                {
+                    type: "bar",
+                    name: yColumn,
+                    data: bars,
+
+                    encode: {
+                        x: 0,
+                        y: 1,
+                        tooltip: [1],
+                    },
+
+                    barMaxWidth: 56,
+
+                    itemStyle: {
+                        color: rawsightChartTheme.primary,
+                        opacity: 0.85,
+                    },
+
+                    emphasis: {
+                        itemStyle: {
+                            color: rawsightChartTheme.emphasis,
+                        },
+                    },
+                },
+            ],
+        };
+    }
 
     if (spec.chartType === "scatter") {
         const points = data.rows.flatMap((row, sourceRowIndex) => {
