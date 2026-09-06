@@ -10,6 +10,7 @@ import type {
 } from "./types/project";
 import "./App.css";
 import type { RawAnalysisColumnResult } from "./types/rawAnalysis";
+import { RawAnalysisVisualization } from "./components/RawAnalysisVisualization";
 
 type FileInfo = {
   name: string;
@@ -1262,6 +1263,11 @@ function App() {
                                 {" · "}
                                 {rawAnalysisResult.routing}
                               </p>
+                            )}
+                            {rawAnalysisResult && (
+                              <RawAnalysisVisualization
+                                result={rawAnalysisResult}
+                              />
                             )}
                           </div>
 
