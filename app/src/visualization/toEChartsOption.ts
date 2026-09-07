@@ -248,6 +248,9 @@ export function toEChartsOption(
             ]];
         });
 
+        const useHorizontalLayout =
+            bars.length >= 7;
+
         return {
             ...commonOption,
 
@@ -291,35 +294,96 @@ export function toEChartsOption(
             },
 
 
-            xAxis: {
-                type: "category",
-                name: xColumn,
-                nameLocation: "middle",
-                nameGap: 36,
+            xAxis: useHorizontalLayout
+                ? {
+                    type: "value",
+                    name: yColumn,
+                    nameLocation: "middle",
+                    nameGap: 32,
 
-                axisLine: {
-                    lineStyle: {
-                        color: rawsightChartTheme.axisLine,
+                    axisLine: {
+                        show: false,
+                    },
+
+                    axisTick: {
+                        show: false,
+                    },
+
+                    axisLabel: {
+                        color: rawsightChartTheme.mutedText,
+                    },
+
+                    splitLine: {
+                        lineStyle: {
+                            color: rawsightChartTheme.gridLine,
+                        },
+                    },
+
+                    nameTextStyle: {
+                        color: rawsightChartTheme.mutedText,
+                    },
+                }
+                : {
+                    type: "category",
+                    name: xColumn,
+                    nameLocation: "middle",
+                    nameGap: 36,
+
+                    axisLine: {
+                        lineStyle: {
+                            color: rawsightChartTheme.axisLine,
+                        },
+                    },
+
+                    axisTick: {
+                        show: false,
+                    },
+
+                    axisLabel: {
+                        color: rawsightChartTheme.mutedText,
+                        interval: 0,
+                    },
+
+                    splitLine: {
+                        show: false,
+                    },
+
+                    nameTextStyle: {
+                        color: rawsightChartTheme.mutedText,
                     },
                 },
 
-                axisTick: {
-                    show: false,
-                },
+            yAxis: useHorizontalLayout
+                ? {
+                    type: "category",
+                    name: xColumn,
+                    nameLocation: "middle",
+                    nameGap: 72,
 
-                axisLabel: {
-                    color: rawsightChartTheme.mutedText,
-                    interval: 0,
-                },
+                    axisLine: {
+                        lineStyle: {
+                            color: rawsightChartTheme.axisLine,
+                        },
+                    },
 
-                splitLine: {
-                    show: false,
-                },
+                    axisTick: {
+                        show: false,
+                    },
 
-                nameTextStyle: {
-                    color: rawsightChartTheme.mutedText,
-                },
-            },
+                    axisLabel: {
+                        color: rawsightChartTheme.mutedText,
+                        interval: 0,
+                    },
+
+                    splitLine: {
+                        show: false,
+                    },
+
+                    nameTextStyle: {
+                        color: rawsightChartTheme.mutedText,
+                    },
+                }
+                : commonOption.yAxis,
 
             series: [
                 {
@@ -327,11 +391,17 @@ export function toEChartsOption(
                     name: yColumn,
                     data: bars,
 
-                    encode: {
-                        x: 0,
-                        y: 1,
-                        tooltip: [1],
-                    },
+                    encode: useHorizontalLayout
+                        ? {
+                            x: 1,
+                            y: 0,
+                            tooltip: [1],
+                        }
+                        : {
+                            x: 0,
+                            y: 1,
+                            tooltip: [1],
+                        },
 
                     barMaxWidth: 56,
 
