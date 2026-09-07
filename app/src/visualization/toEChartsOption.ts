@@ -251,6 +251,35 @@ export function toEChartsOption(
         const useHorizontalLayout =
             bars.length >= 7;
 
+        const countAxis = {
+            type: "value" as const,
+            name: yColumn,
+            nameLocation: "middle" as const,
+            nameGap: 42,
+            minInterval: 1,
+
+            axisLine: {
+                show: false,
+            },
+
+            axisTick: {
+                show: false,
+            },
+
+            axisLabel: {
+                color: rawsightChartTheme.mutedText,
+            },
+
+            splitLine: {
+                lineStyle: {
+                    color: rawsightChartTheme.gridLine,
+                },
+            },
+
+            nameTextStyle: {
+                color: rawsightChartTheme.mutedText,
+            },
+        };
         return {
             ...commonOption,
 
@@ -295,34 +324,7 @@ export function toEChartsOption(
 
 
             xAxis: useHorizontalLayout
-                ? {
-                    type: "value",
-                    name: yColumn,
-                    nameLocation: "middle",
-                    nameGap: 32,
-
-                    axisLine: {
-                        show: false,
-                    },
-
-                    axisTick: {
-                        show: false,
-                    },
-
-                    axisLabel: {
-                        color: rawsightChartTheme.mutedText,
-                    },
-
-                    splitLine: {
-                        lineStyle: {
-                            color: rawsightChartTheme.gridLine,
-                        },
-                    },
-
-                    nameTextStyle: {
-                        color: rawsightChartTheme.mutedText,
-                    },
-                }
+                ? countAxis
                 : {
                     type: "category",
                     name: xColumn,
@@ -383,7 +385,7 @@ export function toEChartsOption(
                         color: rawsightChartTheme.mutedText,
                     },
                 }
-                : commonOption.yAxis,
+                : countAxis,
 
             series: [
                 {
