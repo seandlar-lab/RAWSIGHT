@@ -22,6 +22,22 @@ function formatBinBound(value: number) {
     }).format(value);
 }
 
+function formatShare(value: number) {
+    if (value === 0) {
+        return "0.0%";
+    }
+
+    if (value < 0.01) {
+        return "<0.01%";
+    }
+
+    if (value < 0.1) {
+        return `${value.toFixed(2)}%`;
+    }
+
+    return `${value.toFixed(1)}%`;
+}
+
 export function RawAnalysisVisualization({
     result,
 }: RawAnalysisVisualizationProps) {
@@ -129,7 +145,9 @@ export function RawAnalysisVisualization({
                         </div>
                         <div>
                             {dominantValue
-                                ? `${dominantValue.percent_of_non_null.toFixed(1)}%`
+                                ? formatShare(
+                                    dominantValue.percent_of_non_null,
+                                )
                                 : "—"}
                         </div>
                     </div>

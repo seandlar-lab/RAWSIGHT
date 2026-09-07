@@ -311,7 +311,13 @@ export function toEChartsOption(
 
                     const shareText =
                         typeof share === "number"
-                            ? `${share.toFixed(1)}%`
+                            ? share === 0
+                                ? "0.0%"
+                                : share < 0.01
+                                    ? "<0.01%"
+                                    : share < 0.1
+                                        ? `${share.toFixed(2)}%`
+                                        : `${share.toFixed(1)}%`
                             : "—";
 
                     return (
