@@ -50,6 +50,60 @@ export type CategoricalDistribution = {
     top_values: CategoricalValueFrequency[];
 };
 
+export type TemporalAxisAnalysis = {
+    column: string;
+    format_hint: string | null;
+    excluded_values: string[];
+
+    candidate_count: number;
+    valid_count: number;
+    invalid_count: number;
+
+    distinct_time_points: number;
+    duplicate_timestamp_rows: number;
+
+    first_observation: string | null;
+    last_observation: string | null;
+};
+
+export type TemporalCadenceAnalysis = {
+    column: string;
+    format_hint: string | null;
+
+    interval_count: number;
+
+    minimum_interval_seconds: number | null;
+    median_interval_seconds: number | null;
+    mean_interval_seconds: number | null;
+    maximum_interval_seconds: number | null;
+};
+
+export type TemporalGap = {
+    from: string;
+    to: string;
+    interval_seconds: number;
+    multiple_of_median: number;
+};
+
+export type TemporalGapsAnalysis = {
+    column: string;
+    status: "ok" | "insufficient_data";
+
+    gap_factor: number;
+
+    median_interval_seconds: number | null;
+    gap_threshold_seconds: number | null;
+
+    gap_count: number;
+    gaps: TemporalGap[];
+};
+
+export type TemporalAnalysis = {
+    axis: TemporalAxisAnalysis;
+    cadence: TemporalCadenceAnalysis;
+    gaps: TemporalGapsAnalysis;
+};
+
 export type RawAnalysisColumnResult = {
     column: string;
     technical_type: string;
@@ -72,5 +126,5 @@ export type RawAnalysisColumnResult = {
     | Record<string, unknown>
     | null;
     outliers: Record<string, unknown> | null;
-    temporal: Record<string, unknown> | null;
+    temporal: TemporalAnalysis | null;
 };
