@@ -334,6 +334,7 @@ export function toEChartsOption(
                 : {
                     type: "category",
                     name: xColumn,
+                    inverse: true,
                     nameLocation: "middle",
                     nameGap: 36,
 
