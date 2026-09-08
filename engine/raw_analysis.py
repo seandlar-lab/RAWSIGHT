@@ -13,10 +13,45 @@ if __name__ == "__main__":
         column_name = sys.argv[2]
 
         role = (
-            sys.argv[3]
+            sys.argv[3].strip()
             if len(sys.argv) > 3
+            and sys.argv[3].strip()
             else None
         )
+
+        semantic_type = (
+            sys.argv[4].strip()
+            if len(sys.argv) > 4
+            and sys.argv[4].strip()
+            else None
+        )
+
+        format_hint = (
+            sys.argv[5].strip()
+            if len(sys.argv) > 5
+            and sys.argv[5].strip()
+            else None
+        )
+
+        excluded_values = (
+            json.loads(sys.argv[6])
+            if len(sys.argv) > 6
+            and sys.argv[6].strip()
+            else None
+        )
+
+        if (
+            excluded_values is not None
+            and not isinstance(excluded_values, list)
+        ):
+            raise ValueError(
+                "excluded_values must be a JSON array"
+            )
+        if excluded_values is not None:
+            excluded_values = [
+            str(value)
+            for value in excluded_values
+    ]
 
         connection = duckdb.connect()
 
@@ -29,6 +64,9 @@ if __name__ == "__main__":
             connection,
             relation,
             column_name,
+            semantic_type=semantic_type,
+            format_hint=format_hint,
+            excluded_values=excluded_values,
             role=role,
         )
 
@@ -48,4 +86,3 @@ if __name__ == "__main__":
             flush=True,
         )
         sys.exit(1)
-    
