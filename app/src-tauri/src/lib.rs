@@ -201,6 +201,9 @@ fn raw_analysis_dataset(
     path: String,
     column: String,
     role: Option<String>,
+    semantic_type: Option<String>,
+    format_hint: Option<String>,
+    excluded_values: Vec<String>,
 ) -> Result<String, String> {
     let manifest_dir =
         PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -234,18 +237,24 @@ fn raw_analysis_dataset(
         ));
     }
 
-    let mut command = Command::new(&python);
+    let excluded_values_json =
+    serde_json::to_string(&excluded_values)
+        .map_err(|error| {
+            format!(
+                "Could not serialize excluded values: {error}"
+            )
+        })?;
 
-    command
-        .arg(&raw_analysis_script)
-        .arg(&path)
-        .arg(&column);
+let mut command = Command::new(&python);
 
-    if let Some(role) = role {
-        if !role.trim().is_empty() {
-            command.arg(role);
-        }
-    }
+command
+    .arg(&raw_analysis_script)
+    .arg(&path)
+    .arg(&column)
+    .arg(role.unwrap_or_default())
+    .arg(semantic_type.unwrap_or_default())
+    .arg(format_hint.unwrap_or_default())
+    .arg(excluded_values_json);
 
     let output = command
         .output()
