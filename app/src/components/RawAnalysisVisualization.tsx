@@ -38,6 +38,51 @@ function formatShare(value: number) {
     return `${value.toFixed(1)}%`;
 }
 
+function formatTemporalValue(
+    value: string | null,
+) {
+    if (!value) {
+        return "—";
+    }
+
+    if (value.endsWith("T00:00:00")) {
+        return value.slice(0, 10);
+    }
+
+    return value.replace("T", " ");
+}
+
+function formatDurationSeconds(
+    value: number | null,
+) {
+    if (value === null) {
+        return "—";
+    }
+
+    if (value % 86400 === 0) {
+        const days = value / 86400;
+
+        return `${days.toLocaleString()} ${days === 1 ? "day" : "days"
+            }`;
+    }
+
+    if (value % 3600 === 0) {
+        const hours = value / 3600;
+
+        return `${hours.toLocaleString()} ${hours === 1 ? "hour" : "hours"
+            }`;
+    }
+
+    if (value % 60 === 0) {
+        const minutes = value / 60;
+
+        return `${minutes.toLocaleString()} ${minutes === 1 ? "minute" : "minutes"
+            }`;
+    }
+
+    return `${value.toLocaleString()} s`;
+}
+
 export function RawAnalysisVisualization({
     result,
 }: RawAnalysisVisualizationProps) {
@@ -219,7 +264,9 @@ export function RawAnalysisVisualization({
                             <strong>First observation</strong>
                         </div>
                         <div>
-                            {axis.first_observation ?? "—"}
+                            {formatTemporalValue(
+                                axis.first_observation,
+                            )}
                         </div>
                     </div>
 
@@ -228,7 +275,9 @@ export function RawAnalysisVisualization({
                             <strong>Last observation</strong>
                         </div>
                         <div>
-                            {axis.last_observation ?? "—"}
+                            {formatTemporalValue(
+                                axis.last_observation,
+                            )}
                         </div>
                     </div>
 
@@ -264,9 +313,9 @@ export function RawAnalysisVisualization({
                             <strong>Median cadence</strong>
                         </div>
                         <div>
-                            {cadence.median_interval_seconds !== null
-                                ? `${cadence.median_interval_seconds.toLocaleString()} s`
-                                : "—"}
+                            {formatDurationSeconds(
+                                cadence.median_interval_seconds,
+                            )}
                         </div>
                     </div>
 
