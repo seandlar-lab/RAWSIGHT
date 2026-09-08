@@ -328,6 +328,36 @@ export function RawAnalysisVisualization({
                         </div>
                     </div>
                 </div>
+                {gaps.gaps.length > 0 && (
+                    <div
+                        style={{
+                            marginTop: "24px",
+                        }}
+                    >
+                        <strong>Largest gaps</strong>
+
+                        <ol>
+                            {gaps.gaps
+                                .slice(0, 5)
+                                .map((gap) => (
+                                    <li
+                                        key={`${gap.from}-${gap.to}`}
+                                    >
+                                        {formatTemporalValue(gap.from)}
+                                        {" → "}
+                                        {formatTemporalValue(gap.to)}
+                                        {" — "}
+                                        {formatDurationSeconds(
+                                            gap.interval_seconds,
+                                        )}
+                                        {" ("}
+                                        {gap.multiple_of_median.toFixed(1)}
+                                        {"× median cadence)"}
+                                    </li>
+                                ))}
+                        </ol>
+                    </div>
+                )}
             </div>
         );
     }
