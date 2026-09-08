@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 import duckdb
 
@@ -384,6 +384,346 @@ def analyze_temporal_gaps(
         "gap_count": len(gaps),
         "gaps": gaps[:top_n],
     }
+def analyze_numeric_temporal_series(
+    connection: duckdb.DuckDBPyConnection,
+    relation: duckdb.DuckDBPyRelation,
+    time_column: str,
+    value_column: str,
+    time_format_hint: str | None = None,
+    excluded_time_values: list[str] | None = None,
+    excluded_value_values: list[str] | None = None,
+    max_points: int = 1000,
+) -> dict:
+    if max_points < 2:
+        raise ValueError(
+            "max_points must be at least 2"
+        )
+
+    if time_column not in relation.columns:
+        raise ValueError(
+            f"Column not found: {time_column}"
+        )
+
+    if value_column not in relation.columns:
+        raise ValueError(
+            f"Column not found: {value_column}"
+        )
+
+    value_index = relation.columns.index(
+        value_column
+    )
+    value_type = str(
+        relation.types[value_index]
+    )
+
+    if not is_numeric_type(value_type):
+        raise ValueError(
+            f"Column is not numeric: "
+            f"{value_column} ({value_type})"
+        )
+
+    excluded_time_values = (
+        excluded_time_values or []
+    )
+    excluded_value_values = (
+        excluded_value_values or []
+    )
+
+    relation.create_view(
+        "rawsight_temporal_source",
+        replace=True,
+    )
+
+    time_identifier = quote_identifier(
+        time_column
+    )
+    value_identifier = quote_identifier(
+        value_column
+    )
+
+    if time_format_hint == "YYYYMMDD":
+        parsed_time_expression = (
+            f"TRY_STRPTIME("
+            f"CAST({time_identifier} AS VARCHAR), "
+            f"'%Y%m%d'"
+            f")"
+        )
+    else:
+        parsed_time_expression = (
+            f"TRY_CAST("
+            f"{time_identifier} AS TIMESTAMP"
+            f")"
+        )
+
+    time_exclusion_sql = ""
+
+    if excluded_time_values:
+        quoted_values = ", ".join(
+            "'" + value.replace("'", "''") + "'"
+            for value in excluded_time_values
+        )
+
+        time_exclusion_sql = (
+            f"AND CAST({time_identifier} AS VARCHAR) "
+            f"NOT IN ({quoted_values})"
+        )
+
+    value_exclusion_sql = ""
+
+    if excluded_value_values:
+        quoted_values = ", ".join(
+            "'" + value.replace("'", "''") + "'"
+            for value in excluded_value_values
+        )
+
+        value_exclusion_sql = (
+            f"AND CAST({value_identifier} AS VARCHAR) "
+            f"NOT IN ({quoted_values})"
+        )
+
+    source_sql = f"""
+        WITH parsed AS (
+            SELECT
+                {parsed_time_expression} AS parsed_time,
+                CAST(
+                    {value_identifier} AS DOUBLE
+                ) AS value
+            FROM rawsight_temporal_source
+            WHERE {time_identifier} IS NOT NULL
+              AND {value_identifier} IS NOT NULL
+              {time_exclusion_sql}
+              {value_exclusion_sql}
+        ),
+        valid AS (
+            SELECT
+                parsed_time,
+                value
+            FROM parsed
+            WHERE parsed_time IS NOT NULL
+              AND ISFINITE(value)
+        )
+    """
+
+    bounds = connection.execute(
+        source_sql
+        + """
+        SELECT
+            COUNT(*) AS usable_rows,
+            COUNT(
+                DISTINCT parsed_time
+            ) AS distinct_time_points,
+            MIN(parsed_time),
+            MAX(parsed_time),
+            MIN(EPOCH(parsed_time)),
+            MAX(EPOCH(parsed_time))
+        FROM valid
+        """
+    ).fetchone()
+
+    (
+        usable_rows,
+        distinct_time_points,
+        first_observation,
+        last_observation,
+        first_epoch,
+        last_epoch,
+    ) = bounds
+
+    if (
+        usable_rows == 0
+        or first_observation is None
+        or last_observation is None
+    ):
+        return {
+            "time_column": time_column,
+            "value_column": value_column,
+            "value_technical_type": value_type,
+            "status": "insufficient_data",
+            "usable_rows": 0,
+            "distinct_time_points": 0,
+            "max_points": max_points,
+            "bucketed": False,
+            "bucket_width_seconds": None,
+            "points": [],
+        }
+
+    if distinct_time_points <= max_points:
+        rows = connection.execute(
+            source_sql
+            + """
+            SELECT
+                parsed_time,
+                COUNT(*) AS row_count,
+                AVG(value),
+                MIN(value),
+                MAX(value)
+            FROM valid
+            GROUP BY parsed_time
+            ORDER BY parsed_time
+            """
+        ).fetchall()
+
+        points = [
+            {
+                "time": json_safe_temporal(
+                    parsed_time
+                ),
+                "count": row_count,
+                "mean": float(mean_value),
+                "minimum": float(minimum_value),
+                "maximum": float(maximum_value),
+            }
+            for (
+                parsed_time,
+                row_count,
+                mean_value,
+                minimum_value,
+                maximum_value,
+            ) in rows
+        ]
+
+        return {
+            "time_column": time_column,
+            "value_column": value_column,
+            "value_technical_type": value_type,
+            "status": "ok",
+            "usable_rows": usable_rows,
+            "distinct_time_points":
+                distinct_time_points,
+            "max_points": max_points,
+            "bucketed": False,
+            "bucket_width_seconds": None,
+            "points": points,
+        }
+
+    span_seconds = (
+        float(last_epoch)
+        - float(first_epoch)
+    )
+
+    bucket_width_seconds = (
+        span_seconds / max_points
+    )
+
+    bucket_rows = connection.execute(
+        source_sql
+        + """
+        SELECT
+            LEAST(
+                ?,
+                CAST(
+                    FLOOR(
+                        (
+                            EPOCH(parsed_time) - ?
+                        ) / ?
+                    )
+                    AS INTEGER
+                )
+            ) AS bucket_index,
+
+            COUNT(*) AS row_count,
+            AVG(value),
+            MIN(value),
+            MAX(value)
+
+        FROM valid
+        GROUP BY bucket_index
+        ORDER BY bucket_index
+        """,
+        [
+            max_points - 1,
+            float(first_epoch),
+            bucket_width_seconds,
+        ],
+    ).fetchall()
+
+    buckets_by_index = {
+        bucket_index: (
+            row_count,
+            mean_value,
+            minimum_value,
+            maximum_value,
+        )
+        for (
+            bucket_index,
+            row_count,
+            mean_value,
+            minimum_value,
+            maximum_value,
+        ) in bucket_rows
+    }
+
+    points = []
+
+    for bucket_index in range(max_points):
+        bucket_values = buckets_by_index.get(
+            bucket_index
+        )
+
+        bucket_time = (
+            first_observation
+            + timedelta(
+                seconds=(
+                    bucket_width_seconds
+                    * (bucket_index + 0.5)
+                )
+            )
+        )
+
+        if bucket_values is None:
+            points.append(
+                {
+                    "time":
+                        json_safe_temporal(
+                            bucket_time
+                        ),
+                    "count": 0,
+                    "mean": None,
+                    "minimum": None,
+                    "maximum": None,
+                }
+            )
+            continue
+
+        (
+            row_count,
+            mean_value,
+            minimum_value,
+            maximum_value,
+        ) = bucket_values
+
+        points.append(
+            {
+                "time":
+                    json_safe_temporal(
+                        bucket_time
+                    ),
+                "count": row_count,
+                "mean": float(mean_value),
+                "minimum": float(
+                    minimum_value
+                ),
+                "maximum": float(
+                    maximum_value
+                ),
+            }
+        )
+
+    return {
+        "time_column": time_column,
+        "value_column": value_column,
+        "value_technical_type": value_type,
+        "status": "ok",
+        "usable_rows": usable_rows,
+        "distinct_time_points":
+            distinct_time_points,
+        "max_points": max_points,
+        "bucketed": True,
+        "bucket_width_seconds":
+            bucket_width_seconds,
+        "points": points,
+    }
+
 def analyze_numeric_temporal_trend(
     connection: duckdb.DuckDBPyConnection,
     relation: duckdb.DuckDBPyRelation,
