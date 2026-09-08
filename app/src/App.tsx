@@ -792,9 +792,25 @@ function App() {
     column: string,
     role?: AnalysisColumnRole,
   ) {
-    if (!fileInfo) {
+    if (!fileInfo || !activeProject) {
       return null;
     }
+
+    const activeDataset = activeProject.datasets.find(
+      (dataset) =>
+        dataset.id === activeProject.activeDatasetId,
+    );
+
+    const columnMetadata =
+      activeDataset?.metadata.columns.find(
+        (metadata) =>
+          metadata.columnName === column,
+      );
+
+    const excludedValues =
+      columnMetadata?.specialValues.map(
+        (specialValue) => specialValue.value,
+      ) ?? [];
 
     const rawResult = await invoke<string>(
       "raw_analysis_dataset",
@@ -802,6 +818,11 @@ function App() {
         path: fileInfo.path,
         column,
         role: role ?? null,
+        semanticType:
+          columnMetadata?.semanticType ?? null,
+        formatHint:
+          columnMetadata?.format ?? null,
+        excludedValues,
       },
     );
 
