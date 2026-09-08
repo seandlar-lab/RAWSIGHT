@@ -41,7 +41,10 @@ function formatShare(value: number) {
 export function RawAnalysisVisualization({
     result,
 }: RawAnalysisVisualizationProps) {
-    if (!result.distribution) {
+    if (
+        result.routing !== "temporal" &&
+        !result.distribution
+    ) {
         return null;
     }
 
@@ -187,6 +190,95 @@ export function RawAnalysisVisualization({
                     option={option}
                     height={420}
                 />
+            </div>
+        );
+    }
+
+    if (
+        result.routing === "temporal" &&
+        result.temporal
+    ) {
+        const {
+            axis,
+            cadence,
+            gaps,
+        } = result.temporal;
+
+        return (
+            <div>
+                <div
+                    style={{
+                        display: "flex",
+                        gap: "28px",
+                        flexWrap: "wrap",
+                        marginBottom: "20px",
+                    }}
+                >
+                    <div>
+                        <div>
+                            <strong>First observation</strong>
+                        </div>
+                        <div>
+                            {axis.first_observation ?? "—"}
+                        </div>
+                    </div>
+
+                    <div>
+                        <div>
+                            <strong>Last observation</strong>
+                        </div>
+                        <div>
+                            {axis.last_observation ?? "—"}
+                        </div>
+                    </div>
+
+                    <div>
+                        <div>
+                            <strong>Valid time values</strong>
+                        </div>
+                        <div>
+                            {axis.valid_count.toLocaleString()}
+                        </div>
+                    </div>
+
+                    <div>
+                        <div>
+                            <strong>Invalid time values</strong>
+                        </div>
+                        <div>
+                            {axis.invalid_count.toLocaleString()}
+                        </div>
+                    </div>
+
+                    <div>
+                        <div>
+                            <strong>Distinct time points</strong>
+                        </div>
+                        <div>
+                            {axis.distinct_time_points.toLocaleString()}
+                        </div>
+                    </div>
+
+                    <div>
+                        <div>
+                            <strong>Median cadence</strong>
+                        </div>
+                        <div>
+                            {cadence.median_interval_seconds !== null
+                                ? `${cadence.median_interval_seconds.toLocaleString()} s`
+                                : "—"}
+                        </div>
+                    </div>
+
+                    <div>
+                        <div>
+                            <strong>Detected gaps</strong>
+                        </div>
+                        <div>
+                            {gaps.gap_count.toLocaleString()}
+                        </div>
+                    </div>
+                </div>
             </div>
         );
     }
