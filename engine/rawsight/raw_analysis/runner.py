@@ -10,11 +10,12 @@ from rawsight.raw_analysis.outliers import (
     analyze_iqr_outliers,
 )
 from rawsight.raw_analysis.temporal import (
+    analyze_numeric_temporal_series,
+    analyze_numeric_temporal_trend,
     analyze_temporal_axis,
     analyze_temporal_cadence,
     analyze_temporal_gaps,
 )
-
 
 def analyze_column(
     connection: duckdb.DuckDBPyConnection,
@@ -134,3 +135,42 @@ def analyze_column(
         result["routing"] = "unsupported"
 
     return result
+
+def analyze_numeric_temporal_pair(
+connection: duckdb.DuckDBPyConnection,
+relation: duckdb.DuckDBPyRelation,
+time_column: str,
+value_column: str,
+time_format_hint: str | None = None,
+excluded_time_values: list[str] | None = None,
+excluded_value_values: list[str] | None = None,
+max_points: int = 1000,
+) -> dict:
+    series = analyze_numeric_temporal_series(
+        connection,
+        relation,
+        time_column,
+        value_column,
+        time_format_hint=time_format_hint,
+        excluded_time_values=excluded_time_values,
+        excluded_value_values=excluded_value_values,
+        max_points=max_points,
+    )
+
+    trend = analyze_numeric_temporal_trend(
+        connection,
+        relation,
+        time_column,
+        value_column,
+        time_format_hint=time_format_hint,
+        excluded_time_values=excluded_time_values,
+        excluded_value_values=excluded_value_values,
+    )
+
+    return {
+        "analysis": "numeric_temporal",
+        "time_column": time_column,
+        "value_column": value_column,
+        "series": series,
+        "trend": trend,
+    }
