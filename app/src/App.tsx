@@ -170,6 +170,8 @@ function App() {
 
   const [temporalTimeColumn, setTemporalTimeColumn] = useState("");
   const [temporalValueColumn, setTemporalValueColumn] = useState("");
+  const [temporalAnalysisResult, setTemporalAnalysisResult] =
+    useState<NumericTemporalPairResult | null>(null);
 
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [progressMessage, setProgressMessage] =
@@ -1396,15 +1398,22 @@ function App() {
                                   !temporalTimeColumn ||
                                   !temporalValueColumn
                                 }
-                                onClick={() => {
-                                  void runNumericTemporalAnalysis(
+                                onClick={async () => {
+                                  const result = await runNumericTemporalAnalysis(
                                     temporalTimeColumn,
                                     temporalValueColumn,
                                   );
+
+                                  setTemporalAnalysisResult(result);
                                 }}
                               >
                                 Run Temporal Analysis
                               </button>
+                              {temporalAnalysisResult && (
+                                <pre>
+                                  {JSON.stringify(temporalAnalysisResult, null, 2)}
+                                </pre>
+                              )}
                             </div>
                           </div>
 
