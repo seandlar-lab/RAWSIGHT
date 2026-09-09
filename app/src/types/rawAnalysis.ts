@@ -104,6 +104,61 @@ export type TemporalAnalysis = {
     gaps: TemporalGapsAnalysis;
 };
 
+export type TemporalSeriesPoint = {
+    time: string;
+    count: number;
+
+    mean: number | null;
+    minimum: number | null;
+    maximum: number | null;
+};
+
+export type TemporalSeriesAnalysis = {
+    time_column: string;
+    value_column: string;
+    value_technical_type: string;
+
+    status: "ok" | "insufficient_data";
+
+    usable_rows: number;
+    distinct_time_points: number;
+
+    max_points: number;
+    bucketed: boolean;
+    bucket_width_seconds: number | null;
+
+    points: TemporalSeriesPoint[];
+};
+
+export type NumericTemporalTrend = {
+    time_column: string;
+    value_column: string;
+    value_technical_type: string;
+
+    method: string;
+
+    usable_rows: number;
+    distinct_time_points: number;
+
+    first_observation: string | null;
+    last_observation: string | null;
+
+    slope_per_day: number | null;
+    intercept: number | null;
+    pearson_time_correlation: number | null;
+    r_squared: number | null;
+};
+
+export type NumericTemporalPairResult = {
+    analysis: "numeric_temporal";
+
+    time_column: string;
+    value_column: string;
+
+    series: TemporalSeriesAnalysis;
+    trend: NumericTemporalTrend;
+};
+
 export type RawAnalysisColumnResult = {
     column: string;
     technical_type: string;
