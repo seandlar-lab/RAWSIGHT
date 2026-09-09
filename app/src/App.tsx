@@ -9,7 +9,10 @@ import type {
   RawsightProject,
 } from "./types/project";
 import "./App.css";
-import type { RawAnalysisColumnResult } from "./types/rawAnalysis";
+import type {
+  NumericTemporalPairResult,
+  RawAnalysisColumnResult,
+} from "./types/rawAnalysis";
 import { RawAnalysisVisualization } from "./components/RawAnalysisVisualization";
 
 type FileInfo = {
@@ -164,6 +167,9 @@ function App() {
     useState<RawAnalysisColumnResult | null>(null);
   const [rawAnalysisColumnName, setRawAnalysisColumnName] =
     useState("");
+
+  const [temporalTimeColumn, setTemporalTimeColumn] = useState("");
+  const [temporalValueColumn, setTemporalValueColumn] = useState("");
 
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [progressMessage, setProgressMessage] =
@@ -834,6 +840,61 @@ function App() {
 
     return parsedResult;
   }
+
+  async function runNumericTemporalAnalysis(
+    timeColumn: string,
+    valueColumn: string,
+  ): Promise<NumericTemporalPairResult | null> {
+    if (!fileInfo || !activeProject) {
+      return null;
+    }
+
+    const activeDataset = activeProject.datasets.find(
+      (dataset) =>
+        dataset.id === activeProject.activeDatasetId,
+    );
+
+    const timeMetadata =
+      activeDataset?.metadata.columns.find(
+        (metadata) =>
+          metadata.columnName === timeColumn,
+      );
+
+    const valueMetadata =
+      activeDataset?.metadata.columns.find(
+        (metadata) =>
+          metadata.columnName === valueColumn,
+      );
+
+    const excludedTimeValues =
+      timeMetadata?.specialValues.map(
+        (specialValue) => specialValue.value,
+      ) ?? [];
+
+    const excludedValueValues =
+      valueMetadata?.specialValues.map(
+        (specialValue) => specialValue.value,
+      ) ?? [];
+
+    const rawResult = await invoke<string>(
+      "raw_analysis_temporal_dataset",
+      {
+        path: fileInfo.path,
+        timeColumn,
+        valueColumn,
+        timeFormatHint:
+          timeMetadata?.format ?? null,
+        excludedTimeValues,
+        excludedValueValues,
+        maxPoints: 1000,
+      },
+    );
+
+    return JSON.parse(
+      rawResult,
+    ) as NumericTemporalPairResult;
+  }
+
   async function inspectDatasetStructure(path: string) {
     const rawStructure = await invoke<string>("inspect_structure", {
       path,
@@ -1290,6 +1351,61 @@ function App() {
                                 result={rawAnalysisResult}
                               />
                             )}
+                            <div>
+                              <h3>Numeric Temporal Analysis</h3>
+
+                              <select
+                                value={temporalTimeColumn}
+                                onChange={(event) =>
+                                  setTemporalTimeColumn(event.target.value)
+                                }
+                              >
+                                <option value="">Choose time column</option>
+
+                                {columns.map((column) => (
+                                  <option
+                                    key={column.name}
+                                    value={column.name}
+                                  >
+                                    {column.name}
+                                  </option>
+                                ))}
+                              </select>
+
+                              <select
+                                value={temporalValueColumn}
+                                onChange={(event) =>
+                                  setTemporalValueColumn(event.target.value)
+                                }
+                              >
+                                <option value="">Choose value column</option>
+
+                                {columns.map((column) => (
+                                  <option
+                                    key={column.name}
+                                    value={column.name}
+                                  >
+                                    {column.name}
+                                  </option>
+                                ))}
+                              </select>
+
+                              <button
+                                type="button"
+                                disabled={
+                                  !temporalTimeColumn ||
+                                  !temporalValueColumn
+                                }
+                                onClick={() => {
+                                  void runNumericTemporalAnalysis(
+                                    temporalTimeColumn,
+                                    temporalValueColumn,
+                                  );
+                                }}
+                              >
+                                Run Temporal Analysis
+                              </button>
+                            </div>
                           </div>
 
                         </>
