@@ -1443,6 +1443,33 @@ function App() {
                                     {temporalAnalysisResult.series.bucketed ? "Yes" : "No"}
                                   </p>
 
+                                  <h4>Trend</h4>
+
+                                  <p>
+                                    <strong>First observation:</strong>{" "}
+                                    {temporalAnalysisResult.trend.first_observation}
+                                  </p>
+
+                                  <p>
+                                    <strong>Last observation:</strong>{" "}
+                                    {temporalAnalysisResult.trend.last_observation}
+                                  </p>
+
+                                  <p>
+                                    <strong>Slope per day:</strong>{" "}
+                                    {temporalAnalysisResult.trend.slope_per_day}
+                                  </p>
+
+                                  <p>
+                                    <strong>Time correlation:</strong>{" "}
+                                    {temporalAnalysisResult.trend.pearson_time_correlation}
+                                  </p>
+
+                                  <p>
+                                    <strong>R²:</strong>{" "}
+                                    {temporalAnalysisResult.trend.r_squared}
+                                  </p>
+
                                   <details>
                                     <summary>Raw JSON</summary>
                                     <pre>
