@@ -168,6 +168,26 @@ function formatTemporalTimestamp(value: string | null): string {
   return value.replace("T", " ").slice(0, 16);
 }
 
+function formatDurationSeconds(value: number | null): string {
+  if (value === null) {
+    return "n/a";
+  }
+
+  if (value < 60) {
+    return `${value} s`;
+  }
+
+  if (value < 3600) {
+    return `${Number((value / 60).toFixed(1))} min`;
+  }
+
+  if (value < 86400) {
+    return `${Number((value / 3600).toFixed(1))} h`;
+  }
+
+  return `${Number((value / 86400).toFixed(1))} d`;
+}
+
 function App() {
   const [fileInfo, setFileInfo] = useState<FileInfo | null>(null);
   const [profile, setProfile] = useState<DatasetProfile | null>(null);
@@ -1491,7 +1511,9 @@ function App() {
 
                                   <p>
                                     <strong>Median interval:</strong>{" "}
-                                    {temporalAnalysisResult.cadence.median_interval_seconds ?? "n/a"} seconds
+                                    {formatDurationSeconds(
+                                      temporalAnalysisResult.cadence.median_interval_seconds,
+                                    )}
                                   </p>
 
                                   <h4>Gaps</h4>
@@ -1508,7 +1530,9 @@ function App() {
 
                                   <p>
                                     <strong>Gap threshold:</strong>{" "}
-                                    {temporalAnalysisResult.gaps.gap_threshold_seconds ?? "n/a"} seconds
+                                    {formatDurationSeconds(
+                                      temporalAnalysisResult.gaps.gap_threshold_seconds,
+                                    )}
                                   </p>
 
                                   <details>
