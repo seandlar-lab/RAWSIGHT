@@ -1410,9 +1410,46 @@ function App() {
                                 Run Temporal Analysis
                               </button>
                               {temporalAnalysisResult && (
-                                <pre>
-                                  {JSON.stringify(temporalAnalysisResult, null, 2)}
-                                </pre>
+                                <div>
+                                  <h4>Temporal Analysis Summary</h4>
+
+                                  <p>
+                                    <strong>Time column:</strong>{" "}
+                                    {temporalAnalysisResult.time_column}
+                                  </p>
+
+                                  <p>
+                                    <strong>Value column:</strong>{" "}
+                                    {temporalAnalysisResult.value_column}
+                                  </p>
+
+                                  <p>
+                                    <strong>Status:</strong>{" "}
+                                    {temporalAnalysisResult.series.status}
+                                  </p>
+
+                                  <p>
+                                    <strong>Usable rows:</strong>{" "}
+                                    {temporalAnalysisResult.series.usable_rows}
+                                  </p>
+
+                                  <p>
+                                    <strong>Distinct time points:</strong>{" "}
+                                    {temporalAnalysisResult.series.distinct_time_points}
+                                  </p>
+
+                                  <p>
+                                    <strong>Bucketed:</strong>{" "}
+                                    {temporalAnalysisResult.series.bucketed ? "Yes" : "No"}
+                                  </p>
+
+                                  <details>
+                                    <summary>Raw JSON</summary>
+                                    <pre>
+                                      {JSON.stringify(temporalAnalysisResult, null, 2)}
+                                    </pre>
+                                  </details>
+                                </div>
                               )}
                             </div>
                           </div>
