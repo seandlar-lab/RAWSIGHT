@@ -160,6 +160,14 @@ function getColumnSignals(
   return signals;
 }
 
+function formatTemporalTimestamp(value: string | null): string {
+  if (!value) {
+    return "n/a";
+  }
+
+  return value.replace("T", " ").slice(0, 16);
+}
+
 function App() {
   const [fileInfo, setFileInfo] = useState<FileInfo | null>(null);
   const [profile, setProfile] = useState<DatasetProfile | null>(null);
@@ -1447,12 +1455,16 @@ function App() {
 
                                   <p>
                                     <strong>First observation:</strong>{" "}
-                                    {temporalAnalysisResult.trend.first_observation}
+                                    {formatTemporalTimestamp(
+                                      temporalAnalysisResult.trend.first_observation,
+                                    )}
                                   </p>
 
                                   <p>
                                     <strong>Last observation:</strong>{" "}
-                                    {temporalAnalysisResult.trend.last_observation}
+                                    {formatTemporalTimestamp(
+                                      temporalAnalysisResult.trend.last_observation,
+                                    )}
                                   </p>
 
                                   <p>
