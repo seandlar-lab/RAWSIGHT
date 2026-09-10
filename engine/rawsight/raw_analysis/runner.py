@@ -166,6 +166,21 @@ max_points: int = 1000,
         excluded_time_values=excluded_time_values,
         excluded_value_values=excluded_value_values,
     )
+    cadence = analyze_temporal_cadence(
+        connection,
+        relation,
+        time_column,
+        format_hint=time_format_hint,
+        excluded_values=excluded_time_values,
+    )
+
+    gaps = analyze_temporal_gaps(
+        connection,
+        relation,
+        time_column,
+        format_hint=time_format_hint,
+        excluded_values=excluded_time_values,
+    )
 
     return {
         "analysis": "numeric_temporal",
@@ -173,4 +188,6 @@ max_points: int = 1000,
         "value_column": value_column,
         "series": series,
         "trend": trend,
+        "cadence": cadence,
+        "gaps": gaps,
     }

@@ -157,6 +157,8 @@ export type NumericTemporalPairResult = {
 
     series: TemporalSeriesAnalysis;
     trend: NumericTemporalTrend;
+    cadence: TemporalCadenceAnalysis;
+    gaps: TemporalGapsAnalysis;
 };
 
 export type RawAnalysisColumnResult = {

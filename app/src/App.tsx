@@ -1470,6 +1470,35 @@ function App() {
                                     {temporalAnalysisResult.trend.r_squared}
                                   </p>
 
+                                  <h4>Cadence</h4>
+
+                                  <p>
+                                    <strong>Intervals:</strong>{" "}
+                                    {temporalAnalysisResult.cadence.interval_count}
+                                  </p>
+
+                                  <p>
+                                    <strong>Median interval:</strong>{" "}
+                                    {temporalAnalysisResult.cadence.median_interval_seconds ?? "n/a"} seconds
+                                  </p>
+
+                                  <h4>Gaps</h4>
+
+                                  <p>
+                                    <strong>Status:</strong>{" "}
+                                    {temporalAnalysisResult.gaps.status}
+                                  </p>
+
+                                  <p>
+                                    <strong>Gap count:</strong>{" "}
+                                    {temporalAnalysisResult.gaps.gap_count}
+                                  </p>
+
+                                  <p>
+                                    <strong>Gap threshold:</strong>{" "}
+                                    {temporalAnalysisResult.gaps.gap_threshold_seconds ?? "n/a"} seconds
+                                  </p>
+
                                   <details>
                                     <summary>Raw JSON</summary>
                                     <pre>
