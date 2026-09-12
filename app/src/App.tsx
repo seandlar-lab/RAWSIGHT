@@ -1535,6 +1535,34 @@ function App() {
                                     )}
                                   </p>
 
+                                  {temporalAnalysisResult.gaps.gaps.length > 0 && (
+                                    <>
+                                      <h4>Detected gaps</h4>
+
+                                      <table className="temporal-gap-table">
+                                        <thead>
+                                          <tr>
+                                            <th>From</th>
+                                            <th>To</th>
+                                            <th>Duration</th>
+                                            <th>× median</th>
+                                          </tr>
+                                        </thead>
+
+                                        <tbody>
+                                          {temporalAnalysisResult.gaps.gaps.map((gap) => (
+                                            <tr key={`${gap.from}-${gap.to}`}>
+                                              <td>{formatTemporalTimestamp(gap.from)}</td>
+                                              <td>{formatTemporalTimestamp(gap.to)}</td>
+                                              <td>{formatDurationSeconds(gap.interval_seconds)}</td>
+                                              <td>{gap.multiple_of_median}</td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </>
+                                  )}
+
                                   <details>
                                     <summary>Raw JSON</summary>
                                     <pre>
