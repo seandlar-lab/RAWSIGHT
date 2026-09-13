@@ -3,6 +3,13 @@ import json
 from collections import Counter
 from pathlib import Path
 from datetime import datetime
+TEMPORAL_HEADER_FORMATS = (
+    "%Y-%m-%d",
+    "%m/%d/%y",
+    "%m/%d/%Y",
+    "%d/%m/%Y",
+    "%d/%m/%y",
+)
 
 import duckdb
 
@@ -180,17 +187,10 @@ def parse_temporal_header_value(
     if not text:
         return []
 
-    formats = (
-        "%Y-%m-%d",
-        "%m/%d/%y",
-        "%m/%d/%Y",
-        "%d/%m/%Y",
-        "%d/%m/%y",
-    )
 
     candidates = []
 
-    for date_format in formats:
+    for date_format in TEMPORAL_HEADER_FORMATS:
         try:
             parsed = datetime.strptime(
                 text,
@@ -204,6 +204,7 @@ def parse_temporal_header_value(
             continue
 
     return candidates
+
 
 def find_temporal_header_runs(
     row: list[object],
@@ -251,6 +252,68 @@ def find_temporal_header_runs(
             })
 
     return runs
+
+def evaluate_temporal_header_run(
+    row: list[object],
+    run: dict,
+) -> list[dict]:
+    """
+    Evaluate a temporal header run using consistent date formats.
+
+    A candidate is accepted only if every value can be parsed
+    with the same format and the resulting dates are strictly
+    increasing.
+
+    Ambiguous valid candidates are preserved for later
+    sequence/cadence evaluation.
+    """
+
+    start_index = run["start_index"]
+    end_index = run["end_index"]
+
+    values = row[
+        start_index:end_index + 1
+    ]
+
+    candidates = []
+
+    for date_format in TEMPORAL_HEADER_FORMATS:
+        parsed_dates = []
+
+        for value in values:
+            try:
+                parsed = datetime.strptime(
+                    str(value).strip(),
+                    date_format,
+                )
+                parsed_dates.append(parsed)
+
+            except ValueError:
+                parsed_dates = []
+                break
+
+        if not parsed_dates:
+            continue
+
+        is_increasing = all(
+            current > previous
+            for previous, current in zip(
+                parsed_dates,
+                parsed_dates[1:],
+            )
+        )
+
+        if not is_increasing:
+            continue
+
+        candidates.append({
+            "format": date_format,
+            "first": parsed_dates[0],
+            "last": parsed_dates[-1],
+            "count": len(parsed_dates),
+        })
+
+    return candidates
 
 def inspect_delimited_file(
     file_path: str,
