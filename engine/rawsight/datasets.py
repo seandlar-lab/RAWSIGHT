@@ -95,6 +95,7 @@ def create_structural_model(
 
 def attach_structural_model(
     inspection: dict,
+     physical_structure: dict | None = None,
 ) -> dict:
     """
     Attach the common RAWSIGHT structural model while preserving
@@ -123,10 +124,41 @@ def attach_structural_model(
             0,
         ),
     )
+    if physical_structure is not None:
+        model["physical_structure"] = physical_structure
 
     return {
         **inspection,
         "structural_model": model,
+    }
+
+def build_delimited_physical_structure(
+    inspection: dict,
+) -> dict:
+    """
+    Build the physical structure description for
+    delimited text sources.
+    """
+
+    return {
+        "kind": "delimited_text",
+        "encoding": inspection.get("encoding"),
+        "delimiter": inspection.get("delimiter"),
+        "quotechar": inspection.get("quotechar"),
+        "preview_record_count": inspection.get(
+            "preview_record_count",
+            0,
+        ),
+        "dominant_field_count": inspection.get(
+            "dominant_field_count",
+        ),
+        "field_count_consistency": inspection.get(
+            "field_count_consistency",
+        ),
+        "row_widths": inspection.get(
+            "row_widths",
+            [],
+        ),
     }
 
 def inspect_delimited_file(
@@ -418,11 +450,18 @@ def inspect_source(
         delimited.get("physical_format")
         == "delimited_text"
     ):
-        return attach_structural_model({
+        result = {
             **delimited,
             "detected_format": "delimited_text",
             "inspection_status": "ok",
-        })
+        }
+
+        return attach_structural_model(
+            result,
+            physical_structure=build_delimited_physical_structure(
+                result,
+            ),
+        )
 
     return attach_structural_model({
         **delimited,
