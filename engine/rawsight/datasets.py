@@ -123,7 +123,8 @@ def create_structural_model(
 
 def attach_structural_model(
     inspection: dict,
-     physical_structure: dict | None = None,
+    physical_structure: dict | None = None,
+    logical_structure: dict | None = None,
 ) -> dict:
     """
     Attach the common RAWSIGHT structural model while preserving
@@ -152,8 +153,8 @@ def attach_structural_model(
             0,
         ),
     )
-    if physical_structure is not None:
-        model["physical_structure"] = physical_structure
+    if logical_structure is not None:
+        model["logical_structure"] = logical_structure
 
     return {
         **inspection,
@@ -1037,8 +1038,8 @@ def inspect_source(
             pass
 
     delimited = inspect_delimited_file(
-        file_path,
-        max_rows=max_rows,
+    file_path,
+    max_rows=max_rows,
     )
 
     if (
@@ -1055,6 +1056,9 @@ def inspect_source(
             result,
             physical_structure=build_delimited_physical_structure(
                 result,
+            ),
+            logical_structure=analyze_tabular_logical_structure(
+                result.get("rows", []),
             ),
         )
 
