@@ -651,6 +651,90 @@ def analyze_temporal_values(
 
     return analyses
 
+def analyze_tabular_logical_structure(
+    rows: list[list[object]],
+) -> dict:
+    """
+    Derive logical structure from a tabular preview.
+
+    Only evidence supported by the observed data is reported.
+    Header rows, descriptors, dimensions, measures, and data
+    start positions are deliberately left unresolved here.
+    """
+
+    logical_structure = {
+        "structure_type": "tabular",
+        "header_band": None,
+        "descriptor_fields": [],
+        "temporal_axis": None,
+        "measures": [],
+        "dimensions": [],
+        "candidate_data_start": None,
+    }
+
+    runs = find_tabular_temporal_runs(rows)
+
+    analyzed_runs = []
+
+    for run in runs:
+        values = extract_tabular_run_values(
+            rows,
+            run,
+        )
+
+        analyses = analyze_temporal_values(
+            values,
+        )
+
+        for analysis in analyses:
+            analyzed_runs.append({
+                **run,
+                **analysis,
+            })
+
+    if not analyzed_runs:
+        return logical_structure
+
+    logical_structure["structure_type"] = (
+        "tabular_temporal"
+    )
+
+    # Preserve ambiguity rather than choosing arbitrarily.
+    if len(analyzed_runs) != 1:
+        return logical_structure
+
+    detected = analyzed_runs[0]
+
+    cadence = detected["cadence"]
+    order = detected["order_analysis"]
+
+    logical_structure["temporal_axis"] = {
+        "orientation": detected["orientation"],
+        "sequence_index": detected["sequence_index"],
+        "start_index": detected["start_index"],
+        "end_index": detected["end_index"],
+        "length": detected["length"],
+        "format": detected["format"],
+        "range_start": (
+            detected["range_start"].isoformat()
+        ),
+        "range_end": (
+            detected["range_end"].isoformat()
+        ),
+        "order": order["order"],
+        "distinct_count": detected[
+            "distinct_count"
+        ],
+        "dominant_interval_seconds": cadence[
+            "dominant_interval_seconds"
+        ],
+        "cadence_consistency": cadence[
+            "cadence_consistency"
+        ],
+    }
+
+    return logical_structure
+
 def evaluate_temporal_header_run(
     row: list[object],
     run: dict,
