@@ -253,27 +253,20 @@ def find_temporal_header_runs(
 
     return runs
 
-def evaluate_temporal_header_run(
-    row: list[object],
-    run: dict,
+def evaluate_temporal_sequence(
+    values: list[object],
 ) -> list[dict]:
     """
-    Evaluate a temporal header run using consistent date formats.
+    Evaluate a sequence of possible temporal values.
+
+    The sequence may originate from a row, a column, or another
+    source representation. Orientation is deliberately unknown
+    at this level.
 
     A candidate is accepted only if every value can be parsed
-    with the same format and the resulting dates are strictly
-    increasing.
-
-    Ambiguous valid candidates are preserved for later
-    sequence/cadence evaluation.
+    with the same format and the resulting timestamps are
+    strictly increasing.
     """
-
-    start_index = run["start_index"]
-    end_index = run["end_index"]
-
-    values = row[
-        start_index:end_index + 1
-    ]
 
     candidates = []
 
@@ -314,6 +307,27 @@ def evaluate_temporal_header_run(
         })
 
     return candidates
+
+def evaluate_temporal_header_run(
+    row: list[object],
+    run: dict,
+) -> list[dict]:
+    """
+    Evaluate a temporal run detected horizontally in a
+    candidate header row.
+
+    Extraction is orientation-specific. Temporal sequence
+    evaluation itself is orientation-neutral.
+    """
+
+    start_index = run["start_index"]
+    end_index = run["end_index"]
+
+    values = row[
+        start_index:end_index + 1
+    ]
+
+    return evaluate_temporal_sequence(values)
 
 def inspect_delimited_file(
     file_path: str,
