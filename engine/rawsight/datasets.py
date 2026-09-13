@@ -273,6 +273,97 @@ def extract_tabular_sequence(
         f"Unsupported orientation: {orientation}"
     )    
 
+def profile_structural_sequence(
+    values: list[object],
+) -> dict:
+    """
+    Profile one structural sequence without assigning semantics.
+
+    The sequence may represent a row, a column, or another
+    ordered collection. No header/data assumption is made.
+    """
+
+    nonempty_count = 0
+    temporal_candidate_count = 0
+
+    for value in values:
+        if value is None:
+            continue
+
+        text = str(value).strip()
+
+        if not text:
+            continue
+
+        nonempty_count += 1
+
+        if parse_temporal_value(value):
+            temporal_candidate_count += 1
+
+    value_count = len(values)
+    empty_count = value_count - nonempty_count
+
+    return {
+        "value_count": value_count,
+        "nonempty_count": nonempty_count,
+        "empty_count": empty_count,
+        "temporal_candidate_count": temporal_candidate_count,
+        "temporal_fraction": (
+            temporal_candidate_count / nonempty_count
+            if nonempty_count
+            else 0.0
+        ),
+    }
+
+
+def profile_tabular_structure(
+    rows: list[list[object]],
+) -> dict:
+    """
+    Profile both orientations of a tabular preview.
+
+    Profiling is structural only. Rows and columns are not
+    classified as headers, dimensions, measures, or data here.
+    """
+
+    horizontal = []
+
+    for row_index in range(len(rows)):
+        values = extract_tabular_sequence(
+            rows,
+            orientation="horizontal",
+            index=row_index,
+        )
+
+        horizontal.append({
+            "sequence_index": row_index,
+            **profile_structural_sequence(values),
+        })
+
+    max_width = max(
+        (len(row) for row in rows),
+        default=0,
+    )
+
+    vertical = []
+
+    for column_index in range(max_width):
+        values = extract_tabular_sequence(
+            rows,
+            orientation="vertical",
+            index=column_index,
+        )
+
+        vertical.append({
+            "sequence_index": column_index,
+            **profile_structural_sequence(values),
+        })
+
+    return {
+        "horizontal": horizontal,
+        "vertical": vertical,
+    }
+
 def find_tabular_temporal_runs(
     rows: list[list[object]],
     min_length: int = 3,
