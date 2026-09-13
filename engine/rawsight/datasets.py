@@ -299,6 +299,30 @@ def find_tabular_temporal_runs(
 
     return results
 
+def extract_tabular_run_values(
+    rows: list[list[object]],
+    run: dict,
+) -> list[object]:
+    """
+    Extract the values belonging to one detected tabular run.
+
+    Orientation and position are handled at this boundary.
+    Downstream analysis receives only the resulting sequence.
+    """
+
+    sequence = extract_tabular_sequence(
+        rows,
+        orientation=run["orientation"],
+        index=run["sequence_index"],
+    )
+
+    start_index = run["start_index"]
+    end_index = run["end_index"]
+
+    return sequence[
+        start_index:end_index + 1
+    ]
+
 def find_temporal_runs(
     values: list[object],
     min_length: int = 3,
