@@ -205,23 +205,22 @@ def parse_temporal_header_value(
 
     return candidates
 
-
-def find_temporal_header_runs(
-    row: list[object],
+def find_temporal_runs(
+    values: list[object],
     min_length: int = 3,
 ) -> list[dict]:
     """
-    Find contiguous runs of date-like values in one candidate
-    header row.
+    Find contiguous runs of date-like values in a sequence.
 
-    This step only identifies possible temporal regions.
-    Date-format ambiguity is resolved later from the sequence.
+    The sequence may originate from a row, a column, or another
+    source representation. Orientation is deliberately unknown
+    at this level.
     """
 
     runs = []
     run_start = None
 
-    for index, value in enumerate(row):
+    for index, value in enumerate(values):
         candidates = parse_temporal_header_value(value)
 
         if candidates:
@@ -242,16 +241,32 @@ def find_temporal_header_runs(
             run_start = None
 
     if run_start is not None:
-        run_length = len(row) - run_start
+        run_length = len(values) - run_start
 
         if run_length >= min_length:
             runs.append({
                 "start_index": run_start,
-                "end_index": len(row) - 1,
+                "end_index": len(values) - 1,
                 "length": run_length,
             })
 
     return runs
+
+def find_temporal_header_runs(
+    row: list[object],
+    min_length: int = 3,
+) -> list[dict]:
+    """
+    Find temporal runs horizontally in a candidate header row.
+
+    Horizontal extraction is specific to this wrapper.
+    Run detection itself is orientation-neutral.
+    """
+
+    return find_temporal_runs(
+        row,
+        min_length=min_length,
+    )
 
 def evaluate_temporal_sequence(
     values: list[object],
