@@ -242,6 +242,63 @@ def extract_tabular_sequence(
         f"Unsupported orientation: {orientation}"
     )    
 
+def find_tabular_temporal_runs(
+    rows: list[list[object]],
+    min_length: int = 3,
+) -> list[dict]:
+    """
+    Find temporal runs in both orientations of a tabular preview.
+
+    This function reports where temporal-looking sequences occur.
+    It does not assign semantic meaning such as header, date
+    column, measure, or dimension.
+    """
+
+    results = []
+
+    # Horizontal sequences.
+    for row_index in range(len(rows)):
+        values = extract_tabular_sequence(
+            rows,
+            orientation="horizontal",
+            index=row_index,
+        )
+
+        for run in find_temporal_runs(
+            values,
+            min_length=min_length,
+        ):
+            results.append({
+                "orientation": "horizontal",
+                "sequence_index": row_index,
+                **run,
+            })
+
+    # Vertical sequences.
+    max_width = max(
+        (len(row) for row in rows),
+        default=0,
+    )
+
+    for column_index in range(max_width):
+        values = extract_tabular_sequence(
+            rows,
+            orientation="vertical",
+            index=column_index,
+        )
+
+        for run in find_temporal_runs(
+            values,
+            min_length=min_length,
+        ):
+            results.append({
+                "orientation": "vertical",
+                "sequence_index": column_index,
+                **run,
+            })
+
+    return results
+
 def find_temporal_runs(
     values: list[object],
     min_length: int = 3,
