@@ -205,6 +205,43 @@ def parse_temporal_header_value(
 
     return candidates
 
+def extract_tabular_sequence(
+    rows: list[list[object]],
+    *,
+    orientation: str,
+    index: int,
+) -> list[object]:
+    """
+    Extract one sequence from a two-dimensional tabular preview.
+
+    Horizontal and vertical orientation are handled only at this
+    extraction boundary. Missing cells in ragged rows are
+    preserved as None so downstream detection can see the gap.
+    """
+
+    if orientation == "horizontal":
+        if index < 0 or index >= len(rows):
+            return []
+
+        return list(rows[index])
+
+    if orientation == "vertical":
+        if index < 0:
+            return []
+
+        return [
+            (
+                row[index]
+                if index < len(row)
+                else None
+            )
+            for row in rows
+        ]
+
+    raise ValueError(
+        f"Unsupported orientation: {orientation}"
+    )    
+
 def find_temporal_runs(
     values: list[object],
     min_length: int = 3,
