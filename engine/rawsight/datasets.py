@@ -308,6 +308,71 @@ def evaluate_temporal_sequence(
 
     return candidates
 
+def normalize_temporal_sequence(
+    values: list[object],
+    date_format: str,
+) -> list[datetime]:
+    """
+    Normalize temporal values to datetime objects.
+
+    Source format, orientation, and structural position are
+    deliberately outside this function.
+    """
+
+    return [
+        datetime.strptime(
+            str(value).strip(),
+            date_format,
+        )
+        for value in values
+    ]
+
+def analyze_temporal_cadence(
+    timestamps: list[datetime],
+) -> dict:
+    """
+    Analyze cadence in an already normalized temporal sequence.
+
+    The function is independent of source format, orientation,
+    header structure, and timestamp representation.
+    """
+
+    if len(timestamps) < 2:
+        return {
+            "interval_count": 0,
+            "dominant_interval_seconds": None,
+            "dominant_interval_count": 0,
+            "cadence_consistency": None,
+        }
+
+    intervals = [
+        int(
+            (
+                current - previous
+            ).total_seconds()
+        )
+        for previous, current in zip(
+            timestamps,
+            timestamps[1:],
+        )
+    ]
+
+    interval_counts = Counter(intervals)
+
+    (
+        dominant_interval,
+        dominant_count,
+    ) = interval_counts.most_common(1)[0]
+
+    return {
+        "interval_count": len(intervals),
+        "dominant_interval_seconds": dominant_interval,
+        "dominant_interval_count": dominant_count,
+        "cadence_consistency": (
+            dominant_count / len(intervals)
+        ),
+    }
+
 def evaluate_temporal_header_run(
     row: list[object],
     run: dict,
