@@ -1,4 +1,5 @@
 import csv
+import json
 from collections import Counter
 from pathlib import Path
 
@@ -251,6 +252,114 @@ def inspect_delimited_file(
         ),
         "row_widths": row_widths,
         "rows": rows,
+    }
+
+def inspect_source(
+    file_path: str,
+    max_rows: int = 20,
+) -> dict:
+    """
+    Format-neutral entry point for source inspection.
+
+    File extension is treated as a hint only. Content is used
+    to determine the most likely physical format.
+
+    Format-specific inspectors remain separate adapters.
+    """
+
+    path = Path(file_path)
+
+    if not path.exists():
+        raise FileNotFoundError(
+            f"Dataset not found: {file_path}"
+        )
+
+    sample_bytes = path.read_bytes()[:262144]
+
+    base_result = {
+        "extension": path.suffix.lower(),
+        "file_size_bytes": path.stat().st_size,
+    }
+
+    if not sample_bytes:
+        return {
+            **base_result,
+            "detected_format": "empty",
+            "format_confidence": 1.0,
+            "inspection_status": "ok",
+        }
+
+    # Parquet has a well-defined magic signature.
+    if sample_bytes.startswith(b"PAR1"):
+        return {
+            **base_result,
+            "detected_format": "parquet",
+            "format_confidence": 1.0,
+            "inspection_status": "format_detected",
+        }
+
+    sample_text = None
+    detected_encoding = None
+
+    for encoding in (
+        "utf-8-sig",
+        "cp1252",
+    ):
+        try:
+            sample_text = sample_bytes.decode(encoding)
+            detected_encoding = encoding
+            break
+        except UnicodeDecodeError:
+            continue
+
+    if sample_text is None:
+        return {
+            **base_result,
+            "detected_format": "binary_or_unknown",
+            "format_confidence": 0.0,
+            "inspection_status": "format_unknown",
+        }
+
+    stripped = sample_text.lstrip()
+
+    # First-pass JSON detection.
+    # A dedicated JSON inspector will be added separately.
+    if stripped.startswith(("{", "[")):
+        try:
+            json.loads(sample_text)
+
+            return {
+                **base_result,
+                "detected_format": "json",
+                "format_confidence": 1.0,
+                "encoding": detected_encoding,
+                "inspection_status": "format_detected",
+            }
+
+        except json.JSONDecodeError:
+            # It may still be JSON/JSONL, but we do not
+            # classify malformed or partial JSON as certain.
+            pass
+
+    delimited = inspect_delimited_file(
+        file_path,
+        max_rows=max_rows,
+    )
+
+    if (
+        delimited.get("physical_format")
+        == "delimited_text"
+    ):
+        return {
+            **delimited,
+            "detected_format": "delimited_text",
+            "inspection_status": "ok",
+        }
+
+    return {
+        **delimited,
+        "detected_format": "text_or_unknown",
+        "inspection_status": "format_uncertain",
     }
 
 def open_dataset(
