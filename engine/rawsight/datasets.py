@@ -2,6 +2,7 @@ import csv
 import json
 from collections import Counter
 from pathlib import Path
+from datetime import datetime
 
 import duckdb
 
@@ -160,6 +161,96 @@ def build_delimited_physical_structure(
             [],
         ),
     }
+
+def parse_temporal_header_value(
+    value: object,
+) -> list[datetime]:
+    """
+    Return possible interpretations of a temporal header value.
+
+    Ambiguous date formats are preserved as multiple candidates
+    so neighbouring values can later resolve the sequence.
+    """
+
+    if value is None:
+        return []
+
+    text = str(value).strip()
+
+    if not text:
+        return []
+
+    formats = (
+        "%Y-%m-%d",
+        "%m/%d/%y",
+        "%m/%d/%Y",
+        "%d/%m/%Y",
+        "%d/%m/%y",
+    )
+
+    candidates = []
+
+    for date_format in formats:
+        try:
+            parsed = datetime.strptime(
+                text,
+                date_format,
+            )
+
+            if parsed not in candidates:
+                candidates.append(parsed)
+
+        except ValueError:
+            continue
+
+    return candidates
+
+def find_temporal_header_runs(
+    row: list[object],
+    min_length: int = 3,
+) -> list[dict]:
+    """
+    Find contiguous runs of date-like values in one candidate
+    header row.
+
+    This step only identifies possible temporal regions.
+    Date-format ambiguity is resolved later from the sequence.
+    """
+
+    runs = []
+    run_start = None
+
+    for index, value in enumerate(row):
+        candidates = parse_temporal_header_value(value)
+
+        if candidates:
+            if run_start is None:
+                run_start = index
+            continue
+
+        if run_start is not None:
+            run_length = index - run_start
+
+            if run_length >= min_length:
+                runs.append({
+                    "start_index": run_start,
+                    "end_index": index - 1,
+                    "length": run_length,
+                })
+
+            run_start = None
+
+    if run_start is not None:
+        run_length = len(row) - run_start
+
+        if run_length >= min_length:
+            runs.append({
+                "start_index": run_start,
+                "end_index": len(row) - 1,
+                "length": run_length,
+            })
+
+    return runs
 
 def inspect_delimited_file(
     file_path: str,
