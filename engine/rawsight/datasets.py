@@ -56,6 +56,79 @@ def preview_csv_structure(
         "rows": rows,
     }
 
+def create_structural_model(
+    *,
+    detected_format: str,
+    format_confidence: float,
+    inspection_status: str,
+    extension: str,
+    file_size_bytes: int,
+) -> dict:
+    """
+    Create the format-neutral structural model used by RAWSIGHT.
+
+    Format-specific inspectors may populate additional details,
+    but downstream analysis should be able to rely on this shape.
+    """
+
+    return {
+        "source": {
+            "extension": extension,
+            "file_size_bytes": file_size_bytes,
+        },
+        "format": {
+            "detected_format": detected_format,
+            "format_confidence": format_confidence,
+            "inspection_status": inspection_status,
+        },
+        "physical_structure": {},
+        "logical_structure": {
+            "structure_type": "unknown",
+            "header_band": None,
+            "descriptor_fields": [],
+            "temporal_axis": None,
+            "measures": [],
+            "dimensions": [],
+            "candidate_data_start": None,
+        },
+    }
+
+def attach_structural_model(
+    inspection: dict,
+) -> dict:
+    """
+    Attach the common RAWSIGHT structural model while preserving
+    all format-specific inspection details.
+    """
+
+    model = create_structural_model(
+        detected_format=inspection.get(
+            "detected_format",
+            "unknown",
+        ),
+        format_confidence=inspection.get(
+            "format_confidence",
+            0.0,
+        ),
+        inspection_status=inspection.get(
+            "inspection_status",
+            "unknown",
+        ),
+        extension=inspection.get(
+            "extension",
+            "",
+        ),
+        file_size_bytes=inspection.get(
+            "file_size_bytes",
+            0,
+        ),
+    )
+
+    return {
+        **inspection,
+        "structural_model": model,
+    }
+
 def inspect_delimited_file(
     file_path: str,
     max_rows: int = 20,
@@ -282,21 +355,20 @@ def inspect_source(
     }
 
     if not sample_bytes:
-        return {
+        return attach_structural_model({
             **base_result,
             "detected_format": "empty",
             "format_confidence": 1.0,
             "inspection_status": "ok",
-        }
+        })
 
-    # Parquet has a well-defined magic signature.
     if sample_bytes.startswith(b"PAR1"):
-        return {
+        return attach_structural_model({
             **base_result,
             "detected_format": "parquet",
             "format_confidence": 1.0,
             "inspection_status": "format_detected",
-        }
+        })
 
     sample_text = None
     detected_encoding = None
@@ -313,32 +385,28 @@ def inspect_source(
             continue
 
     if sample_text is None:
-        return {
+        return attach_structural_model({
             **base_result,
             "detected_format": "binary_or_unknown",
             "format_confidence": 0.0,
             "inspection_status": "format_unknown",
-        }
+        })
 
     stripped = sample_text.lstrip()
 
-    # First-pass JSON detection.
-    # A dedicated JSON inspector will be added separately.
     if stripped.startswith(("{", "[")):
         try:
             json.loads(sample_text)
 
-            return {
+            return attach_structural_model({
                 **base_result,
                 "detected_format": "json",
                 "format_confidence": 1.0,
                 "encoding": detected_encoding,
                 "inspection_status": "format_detected",
-            }
+            })
 
         except json.JSONDecodeError:
-            # It may still be JSON/JSONL, but we do not
-            # classify malformed or partial JSON as certain.
             pass
 
     delimited = inspect_delimited_file(
@@ -350,17 +418,17 @@ def inspect_source(
         delimited.get("physical_format")
         == "delimited_text"
     ):
-        return {
+        return attach_structural_model({
             **delimited,
             "detected_format": "delimited_text",
             "inspection_status": "ok",
-        }
+        })
 
-    return {
+    return attach_structural_model({
         **delimited,
         "detected_format": "text_or_unknown",
         "inspection_status": "format_uncertain",
-    }
+    })
 
 def open_dataset(
     connection: duckdb.DuckDBPyConnection,
