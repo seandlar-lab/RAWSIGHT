@@ -2,6 +2,7 @@ import csv
 import json
 from collections import Counter
 from pathlib import Path
+from decimal import Decimal, InvalidOperation
 from datetime import datetime
 TEMPORAL_FORMATS = (
     # ISO dates.
@@ -273,6 +274,39 @@ def extract_tabular_sequence(
         f"Unsupported orientation: {orientation}"
     )    
 
+def classify_structural_value(
+    value: object,
+) -> str:
+    """
+    Classify one observed value structurally.
+
+    Classification is deliberately conservative and does not
+    assign business semantics such as measure, identifier,
+    dimension, or missing-value marker.
+    """
+
+    if value is None:
+        return "empty"
+
+    text = str(value).strip()
+
+    if not text:
+        return "empty"
+
+    if parse_temporal_value(value):
+        return "temporal"
+
+    try:
+        numeric = Decimal(text)
+
+        if numeric.is_finite():
+            return "numeric"
+
+    except InvalidOperation:
+        pass
+
+    return "text"
+
 def profile_structural_sequence(
     values: list[object],
 ) -> dict:
@@ -283,35 +317,54 @@ def profile_structural_sequence(
     ordered collection. No header/data assumption is made.
     """
 
-    nonempty_count = 0
-    temporal_candidate_count = 0
+    type_counts = {
+        "empty": 0,
+        "temporal": 0,
+        "numeric": 0,
+        "text": 0,
+    }
 
     for value in values:
-        if value is None:
-            continue
+        value_type = classify_structural_value(
+            value
+        )
 
-        text = str(value).strip()
-
-        if not text:
-            continue
-
-        nonempty_count += 1
-
-        if parse_temporal_value(value):
-            temporal_candidate_count += 1
+        type_counts[value_type] += 1
 
     value_count = len(values)
-    empty_count = value_count - nonempty_count
+    nonempty_count = (
+        value_count - type_counts["empty"]
+    )
+
+    def fraction(
+        count: int,
+    ) -> float:
+        if not nonempty_count:
+            return 0.0
+
+        return count / nonempty_count
 
     return {
         "value_count": value_count,
         "nonempty_count": nonempty_count,
-        "empty_count": empty_count,
-        "temporal_candidate_count": temporal_candidate_count,
-        "temporal_fraction": (
-            temporal_candidate_count / nonempty_count
-            if nonempty_count
-            else 0.0
+        "empty_count": type_counts["empty"],
+        "temporal_candidate_count": type_counts[
+            "temporal"
+        ],
+        "numeric_candidate_count": type_counts[
+            "numeric"
+        ],
+        "text_candidate_count": type_counts[
+            "text"
+        ],
+        "temporal_fraction": fraction(
+            type_counts["temporal"]
+        ),
+        "numeric_fraction": fraction(
+            type_counts["numeric"]
+        ),
+        "text_fraction": fraction(
+            type_counts["text"]
         ),
     }
 
