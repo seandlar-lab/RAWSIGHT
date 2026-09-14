@@ -723,6 +723,64 @@ def find_structural_region_starts(
         reverse=True,
     )
 
+def summarize_structural_region_candidates(
+    profiles: list[dict],
+    *,
+    orientation: str,
+) -> dict:
+    """
+    Summarize evidence for structural region-start candidates.
+
+    The result preserves ambiguity and does not assign semantic
+    meaning such as header boundary, data start, dimension,
+    measure, or record region.
+    """
+
+    ranked_candidates = [
+        candidate
+        for candidate in find_structural_region_starts(
+            profiles
+        )
+        if candidate["evidence_score"] > 0.0
+    ]
+
+    if not ranked_candidates:
+        return {
+            "orientation": orientation,
+            "candidate_count": 0,
+            "ranked_candidates": [],
+            "leading_score": None,
+            "runner_up_score": None,
+            "score_margin": None,
+        }
+
+    leading_score = ranked_candidates[0][
+        "evidence_score"
+    ]
+
+    runner_up_score = (
+        ranked_candidates[1]["evidence_score"]
+        if len(ranked_candidates) > 1
+        else None
+    )
+
+    score_margin = (
+        leading_score - runner_up_score
+        if runner_up_score is not None
+        else None
+    )
+
+    return {
+        "orientation": orientation,
+        "candidate_count": len(
+            ranked_candidates
+        ),
+        "ranked_candidates": ranked_candidates,
+        "leading_score": leading_score,
+        "runner_up_score": runner_up_score,
+        "score_margin": score_margin,
+    }
+
 def find_tabular_temporal_runs(
     rows: list[list[object]],
     min_length: int = 3,
