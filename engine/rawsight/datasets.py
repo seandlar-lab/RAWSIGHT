@@ -417,6 +417,125 @@ def profile_tabular_structure(
         "vertical": vertical,
     }
 
+def structural_profile_distribution(
+    profile: dict,
+) -> dict:
+    """
+    Convert a structural profile to a normalized distribution.
+
+    The four fractions sum to 1.0 when values are present.
+    """
+
+    value_count = profile.get(
+        "value_count",
+        0,
+    )
+
+    if not value_count:
+        return {
+            "empty": 0.0,
+            "temporal": 0.0,
+            "numeric": 0.0,
+            "text": 0.0,
+        }
+
+    return {
+        "empty": (
+            profile.get("empty_count", 0)
+            / value_count
+        ),
+        "temporal": (
+            profile.get(
+                "temporal_candidate_count",
+                0,
+            )
+            / value_count
+        ),
+        "numeric": (
+            profile.get(
+                "numeric_candidate_count",
+                0,
+            )
+            / value_count
+        ),
+        "text": (
+            profile.get(
+                "text_candidate_count",
+                0,
+            )
+            / value_count
+        ),
+    }
+
+
+def structural_profile_distance(
+    first: dict,
+    second: dict,
+) -> float:
+    """
+    Measure structural difference between two sequence profiles.
+
+    0.0 means identical type distributions.
+    1.0 means completely different distributions.
+    """
+
+    first_distribution = (
+        structural_profile_distribution(first)
+    )
+
+    second_distribution = (
+        structural_profile_distribution(second)
+    )
+
+    return sum(
+        abs(
+            first_distribution[key]
+            - second_distribution[key]
+        )
+        for key in (
+            "empty",
+            "temporal",
+            "numeric",
+            "text",
+        )
+    ) / 2.0
+
+
+def find_structural_transitions(
+    profiles: list[dict],
+) -> list[dict]:
+    """
+    Compare adjacent structural profiles.
+
+    Transitions are evidence only. No header/data semantic
+    interpretation is assigned here.
+    """
+
+    transitions = []
+
+    for first, second in zip(
+        profiles,
+        profiles[1:],
+    ):
+        transitions.append({
+            "from_sequence_index": first[
+                "sequence_index"
+            ],
+            "to_sequence_index": second[
+                "sequence_index"
+            ],
+            "distance": structural_profile_distance(
+                first,
+                second,
+            ),
+        })
+
+    return sorted(
+        transitions,
+        key=lambda item: item["distance"],
+        reverse=True,
+    )
+
 def find_tabular_temporal_runs(
     rows: list[list[object]],
     min_length: int = 3,
