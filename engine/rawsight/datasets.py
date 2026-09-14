@@ -649,6 +649,80 @@ def analyze_structural_boundaries(
         reverse=True,
     )
 
+def find_structural_region_starts(
+    profiles: list[dict],
+) -> list[dict]:
+    """
+    Identify candidate starts of structurally stable regions.
+
+    Candidates are based on the contrast between the structural
+    change at a boundary and the internal variation after it.
+
+    No semantic meaning such as header or data region is
+    assigned here.
+    """
+
+    boundaries = analyze_structural_boundaries(
+        profiles
+    )
+
+    candidates = []
+
+    for boundary in boundaries:
+        after_mean = boundary[
+            "after_mean_internal_distance"
+        ]
+
+        if after_mean is None:
+            after_mean = 0.0
+
+        region_contrast = (
+            boundary["boundary_distance"]
+            - after_mean
+        )
+
+        total_sequence_count = len(profiles)
+
+        support_fraction = (
+            boundary["after_sequence_count"]
+            / total_sequence_count
+            if total_sequence_count
+            else 0.0
+        )
+
+        evidence_score = (
+            max(region_contrast, 0.0)
+            * support_fraction
+        )
+
+        candidates.append({
+            "start_sequence_index": boundary[
+                "to_sequence_index"
+            ],
+            "boundary_distance": boundary[
+                "boundary_distance"
+            ],
+            "after_sequence_count": boundary[
+                "after_sequence_count"
+            ],
+            "after_mean_internal_distance": (
+                boundary[
+                    "after_mean_internal_distance"
+                ]
+            ),
+            "region_contrast": region_contrast,
+            "support_fraction": support_fraction,
+            "evidence_score": evidence_score,
+        })
+
+    return sorted(
+        candidates,
+        key=lambda item: item[
+            "evidence_score"
+        ],
+        reverse=True,
+    )
+
 def find_tabular_temporal_runs(
     rows: list[list[object]],
     min_length: int = 3,
