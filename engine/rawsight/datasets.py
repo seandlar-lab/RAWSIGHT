@@ -536,6 +536,119 @@ def find_structural_transitions(
         reverse=True,
     )
 
+def analyze_structural_boundaries(
+    profiles: list[dict],
+) -> list[dict]:
+    """
+    Describe evidence around every structural boundary.
+
+    A boundary is not assigned semantic meaning here.
+    We measure both the change at the boundary and how stable
+    the structure is on each side when observations exist.
+    """
+
+    if len(profiles) < 2:
+        return []
+
+    transitions = find_structural_transitions(
+        profiles
+    )
+
+    distance_by_boundary = {
+        (
+            item["from_sequence_index"],
+            item["to_sequence_index"],
+        ): item["distance"]
+        for item in transitions
+    }
+
+    results = []
+
+    for position in range(
+        len(profiles) - 1
+    ):
+        first = profiles[position]
+        second = profiles[position + 1]
+
+        boundary_distance = (
+            distance_by_boundary.get(
+                (
+                    first["sequence_index"],
+                    second["sequence_index"],
+                ),
+                0.0,
+            )
+        )
+
+        before_distances = []
+
+        for index in range(position):
+            before_distances.append(
+                structural_profile_distance(
+                    profiles[index],
+                    profiles[index + 1],
+                )
+            )
+
+        after_distances = []
+
+        for index in range(
+            position + 1,
+            len(profiles) - 1,
+        ):
+            after_distances.append(
+                structural_profile_distance(
+                    profiles[index],
+                    profiles[index + 1],
+                )
+            )
+
+        before_mean = (
+            sum(before_distances)
+            / len(before_distances)
+            if before_distances
+            else None
+        )
+
+        after_mean = (
+            sum(after_distances)
+            / len(after_distances)
+            if after_distances
+            else None
+        )
+
+        results.append({
+            "from_sequence_index": first[
+                "sequence_index"
+            ],
+            "to_sequence_index": second[
+                "sequence_index"
+            ],
+            "boundary_distance": boundary_distance,
+            "before_sequence_count": (
+                position + 1
+            ),
+            "after_sequence_count": (
+                len(profiles)
+                - position
+                - 1
+            ),
+            "before_mean_internal_distance": (
+                before_mean
+            ),
+            "after_mean_internal_distance": (
+                after_mean
+            ),
+        })
+
+    return sorted(
+        results,
+        key=lambda item: item[
+            "boundary_distance"
+        ],
+        reverse=True,
+    )
+
 def find_tabular_temporal_runs(
     rows: list[list[object]],
     min_length: int = 3,
