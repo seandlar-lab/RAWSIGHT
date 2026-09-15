@@ -113,12 +113,24 @@ def create_structural_model(
         "physical_structure": {},
         "logical_structure": {
             "structure_type": "unknown",
+
+            # Semantic conclusions.
             "header_band": None,
             "descriptor_fields": [],
-            "temporal_axis": None,
             "measures": [],
             "dimensions": [],
+
+            # Temporal evidence.
+            "temporal_axis": None,
+            "temporal_axis_candidates": [],
+
+            # Structural evidence.
+            "structural_evidence": None,
             "candidate_data_start": None,
+            "candidate_pre_data_band": None,
+
+            # Higher-level layout inference.
+            "layout_candidate": None,
         },
     }
 
@@ -781,6 +793,220 @@ def summarize_structural_region_candidates(
         "score_margin": score_margin,
     }
 
+def build_tabular_structural_evidence(
+    rows: list[list[object]],
+) -> dict:
+    """
+    Build structural evidence for both orientations of a
+    tabular preview.
+
+    Evidence is preserved independently of semantic
+    interpretation.
+    """
+
+    profiles = profile_tabular_structure(
+        rows
+    )
+
+    return {
+        "horizontal_regions": (
+            summarize_structural_region_candidates(
+                profiles["horizontal"],
+                orientation="horizontal",
+            )
+        ),
+        "vertical_regions": (
+            summarize_structural_region_candidates(
+                profiles["vertical"],
+                orientation="vertical",
+            )
+        ),
+    }
+
+def infer_tabular_layout_candidate(
+    temporal_axis: dict | None,
+    structural_evidence: dict,
+) -> dict | None:
+    """
+    Infer a candidate tabular layout from independent structural
+    observations.
+
+    The result remains a candidate. It is not a semantic
+    conclusion about the dataset.
+    """
+
+    if temporal_axis is None:
+        return None
+
+    orientation = temporal_axis[
+        "orientation"
+    ]
+
+    if orientation == "horizontal":
+        region_summary = structural_evidence[
+            "horizontal_regions"
+        ]
+
+        candidate = {
+            "kind": "wide_temporal",
+            "status": "candidate",
+            "basis": [
+                "horizontal_temporal_axis",
+            ],
+            "region_evidence": region_summary,
+        }
+
+        ranked = region_summary[
+            "ranked_candidates"
+        ]
+
+        if ranked:
+            leading = ranked[0]
+
+            if (
+                temporal_axis["sequence_index"]
+                < leading["start_sequence_index"]
+            ):
+                candidate["basis"].append(
+                    "stable_region_follows_temporal_axis"
+                )
+
+        return candidate
+
+    if orientation == "vertical":
+        return {
+            "kind": "long_temporal",
+            "status": "candidate",
+            "basis": [
+                "vertical_temporal_axis",
+            ],
+            "temporal_sequence_index": (
+                temporal_axis[
+                    "sequence_index"
+                ]
+            ),
+            "region_evidence": structural_evidence[
+                "horizontal_regions"
+            ],
+        }
+
+    return None
+
+def build_tabular_structural_evidence(
+    rows: list[list[object]],
+) -> dict:
+    """
+    Build structural evidence for both orientations of a
+    tabular preview.
+
+    Evidence is preserved independently of semantic
+    interpretation.
+    """
+
+    profiles = profile_tabular_structure(
+        rows
+    )
+
+    return {
+        "horizontal_regions": (
+            summarize_structural_region_candidates(
+                profiles["horizontal"],
+                orientation="horizontal",
+            )
+        ),
+        "vertical_regions": (
+            summarize_structural_region_candidates(
+                profiles["vertical"],
+                orientation="vertical",
+            )
+        ),
+    }
+
+def infer_tabular_layout_candidate(
+    temporal_axis: dict | None,
+    structural_evidence: dict,
+) -> dict | None:
+    """
+    Infer a candidate tabular layout from independent structural
+    observations.
+
+    The result remains a candidate. No confidence threshold is
+    used and no semantic header/data assumption is required.
+    """
+
+    if temporal_axis is None:
+        return None
+
+    orientation = temporal_axis[
+        "orientation"
+    ]
+
+    if orientation == "horizontal":
+        horizontal = structural_evidence[
+            "horizontal_regions"
+        ]
+
+        ranked = horizontal[
+            "ranked_candidates"
+        ]
+
+        candidate = {
+            "kind": "wide_temporal",
+            "status": "candidate",
+            "basis": [
+                "horizontal_temporal_axis",
+            ],
+        }
+
+        if ranked:
+            leading = ranked[0]
+
+            candidate[
+                "leading_region_start"
+            ] = leading[
+                "start_sequence_index"
+            ]
+
+            candidate[
+                "region_evidence_score"
+            ] = leading[
+                "evidence_score"
+            ]
+
+            candidate[
+                "region_score_margin"
+            ] = horizontal[
+                "score_margin"
+            ]
+
+            if (
+                temporal_axis["sequence_index"]
+                < leading[
+                    "start_sequence_index"
+                ]
+            ):
+                candidate["basis"].append(
+                    "stable_region_follows_temporal_axis"
+                )
+
+        return candidate
+
+    if orientation == "vertical":
+        return {
+            "kind": "long_temporal",
+            "status": "candidate",
+            "basis": [
+                "vertical_temporal_axis",
+            ],
+            "temporal_sequence_index": (
+                temporal_axis[
+                    "sequence_index"
+                ]
+            ),
+        }
+
+    return None
+
 def find_tabular_temporal_runs(
     rows: list[list[object]],
     min_length: int = 3,
@@ -1160,28 +1386,96 @@ def analyze_temporal_values(
 
     return analyses
 
+def build_temporal_axis_candidate(
+    detected: dict,
+) -> dict:
+    """
+    Build a JSON-safe temporal-axis candidate from analyzed
+    temporal evidence.
+
+    The candidate describes observed structure only. It does
+    not decide whether the sequence is a header, field, index,
+    or record dimension.
+    """
+
+    cadence = detected["cadence"]
+    order = detected["order_analysis"]
+
+    return {
+        "orientation": detected["orientation"],
+        "sequence_index": detected["sequence_index"],
+        "start_index": detected["start_index"],
+        "end_index": detected["end_index"],
+        "length": detected["length"],
+        "format": detected["format"],
+        "range_start": detected[
+            "range_start"
+        ].isoformat(),
+        "range_end": detected[
+            "range_end"
+        ].isoformat(),
+        "order": order["order"],
+        "count": detected["count"],
+        "distinct_count": detected[
+            "distinct_count"
+        ],
+        "duplicate_count": order[
+            "duplicate_count"
+        ],
+        "dominant_interval_seconds": cadence[
+            "dominant_interval_seconds"
+        ],
+        "cadence_consistency": cadence[
+            "cadence_consistency"
+        ],
+    }    
+
 def analyze_tabular_logical_structure(
     rows: list[list[object]],
 ) -> dict:
     """
     Derive logical structure from a tabular preview.
 
-    Only evidence supported by the observed data is reported.
-    Header rows, descriptors, dimensions, measures, and data
-    start positions are deliberately left unresolved here.
+    Observed evidence, candidates, and semantic conclusions are
+    kept separate. Ambiguity is preserved instead of resolved
+    arbitrarily.
     """
 
     logical_structure = {
         "structure_type": "tabular",
+
+        # Semantic conclusions.
         "header_band": None,
         "descriptor_fields": [],
-        "temporal_axis": None,
         "measures": [],
         "dimensions": [],
+
+        # Temporal evidence.
+        "temporal_axis": None,
+        "temporal_axis_candidates": [],
+
+        # Structural evidence.
+        "structural_evidence": None,
         "candidate_data_start": None,
+        "candidate_pre_data_band": None,
+
+        # Higher-level inference.
+        "layout_candidate": None,
     }
 
-    runs = find_tabular_temporal_runs(rows)
+    structural_evidence = (
+        build_tabular_structural_evidence(
+            rows
+        )
+    )
+
+    logical_structure[
+        "structural_evidence"
+    ] = structural_evidence
+
+    runs = find_tabular_temporal_runs(
+        rows
+    )
 
     analyzed_runs = []
 
@@ -1192,7 +1486,7 @@ def analyze_tabular_logical_structure(
         )
 
         analyses = analyze_temporal_values(
-            values,
+            values
         )
 
         for analysis in analyses:
@@ -1201,46 +1495,97 @@ def analyze_tabular_logical_structure(
                 **analysis,
             })
 
-    if not analyzed_runs:
-        return logical_structure
+    temporal_candidates = [
+        build_temporal_axis_candidate(
+            detected
+        )
+        for detected in analyzed_runs
+    ]
 
-    logical_structure["structure_type"] = (
-        "tabular_temporal"
+    logical_structure[
+        "temporal_axis_candidates"
+    ] = temporal_candidates
+
+    if temporal_candidates:
+        logical_structure[
+            "structure_type"
+        ] = "tabular_temporal"
+
+    # Promote only an unambiguous temporal candidate.
+    if len(temporal_candidates) == 1:
+        logical_structure[
+            "temporal_axis"
+        ] = temporal_candidates[0]
+
+    horizontal_regions = structural_evidence[
+        "horizontal_regions"
+    ]
+
+    ranked_regions = horizontal_regions[
+        "ranked_candidates"
+    ]
+
+    # Preserve the structural-region inference as a candidate,
+    # including its evidence and ambiguity.
+    if ranked_regions:
+        leading = ranked_regions[0]
+
+        logical_structure[
+            "candidate_data_start"
+        ] = {
+            "orientation": "horizontal",
+            "sequence_index": leading[
+                "start_sequence_index"
+            ],
+            "status": "candidate",
+            "evidence_score": leading[
+                "evidence_score"
+            ],
+            "runner_up_score": (
+                horizontal_regions[
+                    "runner_up_score"
+                ]
+            ),
+            "score_margin": (
+                horizontal_regions[
+                    "score_margin"
+                ]
+            ),
+            "candidate_count": (
+                horizontal_regions[
+                    "candidate_count"
+                ]
+            ),
+        }
+
+        start_index = leading[
+            "start_sequence_index"
+        ]
+
+        if start_index > 0:
+            logical_structure[
+                "candidate_pre_data_band"
+            ] = {
+                "orientation": "horizontal",
+                "start_sequence_index": 0,
+                "end_sequence_index": (
+                    start_index - 1
+                ),
+                "depth": start_index,
+                "status": "candidate",
+                "basis": [
+                    "precedes_ranked_structural_region",
+                ],
+            }
+
+    logical_structure[
+        "layout_candidate"
+    ] = infer_tabular_layout_candidate(
+        logical_structure[
+            "temporal_axis"
+        ],
+        structural_evidence,
     )
-
-    # Preserve ambiguity rather than choosing arbitrarily.
-    if len(analyzed_runs) != 1:
-        return logical_structure
-
-    detected = analyzed_runs[0]
-
-    cadence = detected["cadence"]
-    order = detected["order_analysis"]
-
-    logical_structure["temporal_axis"] = {
-        "orientation": detected["orientation"],
-        "sequence_index": detected["sequence_index"],
-        "start_index": detected["start_index"],
-        "end_index": detected["end_index"],
-        "length": detected["length"],
-        "format": detected["format"],
-        "range_start": (
-            detected["range_start"].isoformat()
-        ),
-        "range_end": (
-            detected["range_end"].isoformat()
-        ),
-        "order": order["order"],
-        "distinct_count": detected[
-            "distinct_count"
-        ],
-        "dominant_interval_seconds": cadence[
-            "dominant_interval_seconds"
-        ],
-        "cadence_consistency": cadence[
-            "cadence_consistency"
-        ],
-    }
 
     return logical_structure
 
