@@ -3,7 +3,11 @@ import sys
 from pathlib import Path
 
 import duckdb
-from rawsight.datasets import open_dataset
+from rawsight.datasets import (
+    inspect_source,
+    open_dataset,
+    select_analysis_strategy,
+)
 
 NUMERIC_TYPES = (
     "TINYINT",
@@ -114,7 +118,206 @@ def detect_yyyymmdd_date(
         "zero_count": zero_count,
     }
 
+def build_analysis_status(
+    status: str,
+    reason: str | None = None,
+) -> dict:
+    return {
+        "status": status,
+        "reason": reason,
+    }
+
+def profile_conservative_dataset(
+    file_path: str,
+    inspection: dict,
+    analysis_strategy: dict,
+) -> dict:
+    """
+    Produce a safe structural profile without running
+    whole-row DISTINCT or mass column aggregates.
+    """
+
+    path = Path(file_path)
+
+    progress("Opening dataset safely")
+
+    connection = duckdb.connect()
+
+    try:
+        relation = open_dataset(
+            connection,
+            file_path,
+        )
+
+        column_names = relation.columns
+        column_types = [
+            str(data_type)
+            for data_type in relation.types
+        ]
+
+        relation.create_view(
+            "rawsight_source",
+            replace=True,
+        )
+
+        progress("Counting rows")
+
+        row_count = connection.execute(
+            """
+            SELECT COUNT(*)
+            FROM rawsight_source
+            """
+        ).fetchone()[0]
+
+        columns = [
+            {
+                "name": name,
+                "type": data_type,
+                "null_count": None,
+                "null_percent": None,
+                "distinct_count": None,
+                "unique_percent": None,
+                "min": None,
+                "max": None,
+                "semantic_hint": None,
+            }
+            for name, data_type in zip(
+                column_names,
+                column_types,
+            )
+        ]
+
+        return {
+            "file": path.name,
+            "rows": row_count,
+            "column_count": len(columns),
+
+            "duplicate_rows": None,
+            "duplicate_percent": None,
+            "missing_values": None,
+            "missing_percent": None,
+
+            "columns": columns,
+
+            "analysis_strategy": analysis_strategy,
+            "structural_model": inspection.get(
+                "structural_model"
+            ),
+        }
+
+    finally:
+        connection.close()
+
+
 def profile_dataset(file_path: str) -> dict:
+    """
+    Inspect structure and select a safe analysis path before
+    executing expensive profiling operations.
+    """
+
+    path = Path(file_path)
+
+    if not path.exists():
+        raise FileNotFoundError(
+            f"File not found: {path}"
+        )
+
+    progress("Inspecting source structure")
+
+    inspection = inspect_source(
+        file_path
+    )
+
+    structural_model = inspection.get(
+        "structural_model",
+        {},
+    )
+
+    analysis_strategy = (
+        select_analysis_strategy(
+            structural_model
+        )
+    )
+
+    progress(
+        "Analysis strategy: "
+        + analysis_strategy["strategy"]
+    )
+
+    return profile_conservative_dataset(
+        file_path=file_path,
+        inspection=inspection,
+        analysis_strategy=analysis_strategy,
+    )
+
+def profile_dataset_legacy(file_path: str) -> dict:
+    """
+    Route dataset analysis according to detected structural
+    characteristics.
+
+    Unsafe generic profiling is bypassed when structural
+    evidence indicates that a specialized or conservative
+    strategy is required.
+    """
+
+    path = Path(file_path)
+
+    if not path.exists():
+        raise FileNotFoundError(
+            f"File not found: {path}"
+        )
+
+    progress("Inspecting source structure")
+
+    inspection = inspect_source(
+        file_path
+    )
+
+    structural_model = inspection.get(
+        "structural_model",
+        {},
+    )
+
+    analysis_strategy = select_analysis_strategy(
+        structural_model
+    )
+
+    strategy = analysis_strategy[
+        "strategy"
+    ]
+
+    progress(
+        f"Analysis strategy: {strategy}"
+    )
+
+    if strategy == "wide_temporal":
+        return profile_wide_temporal_safe(
+            file_path=file_path,
+            inspection=inspection,
+            analysis_strategy=analysis_strategy,
+        )
+
+    if strategy == "long_temporal":
+        return profile_conservative_dataset(
+            file_path=file_path,
+            inspection=inspection,
+            analysis_strategy=analysis_strategy,
+        )
+
+    if strategy == "conservative_tabular":
+        return profile_conservative_dataset(
+            file_path=file_path,
+            inspection=inspection,
+            analysis_strategy=analysis_strategy,
+        )
+
+    return profile_conservative_dataset(
+        file_path=file_path,
+        inspection=inspection,
+        analysis_strategy=analysis_strategy,
+    )
+
+def profile_dataset_legacy(file_path: str) -> dict:
     path = Path(file_path)
 
     if not path.exists():
