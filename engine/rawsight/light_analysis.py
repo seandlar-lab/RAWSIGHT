@@ -208,49 +208,7 @@ def profile_conservative_dataset(
     finally:
         connection.close()
 
-
 def profile_dataset(file_path: str) -> dict:
-    """
-    Inspect structure and select a safe analysis path before
-    executing expensive profiling operations.
-    """
-
-    path = Path(file_path)
-
-    if not path.exists():
-        raise FileNotFoundError(
-            f"File not found: {path}"
-        )
-
-    progress("Inspecting source structure")
-
-    inspection = inspect_source(
-        file_path
-    )
-
-    structural_model = inspection.get(
-        "structural_model",
-        {},
-    )
-
-    analysis_strategy = (
-        select_analysis_strategy(
-            structural_model
-        )
-    )
-
-    progress(
-        "Analysis strategy: "
-        + analysis_strategy["strategy"]
-    )
-
-    return profile_conservative_dataset(
-        file_path=file_path,
-        inspection=inspection,
-        analysis_strategy=analysis_strategy,
-    )
-
-def profile_dataset_legacy(file_path: str) -> dict:
     """
     Route dataset analysis according to detected structural
     characteristics.
@@ -316,6 +274,111 @@ def profile_dataset_legacy(file_path: str) -> dict:
         inspection=inspection,
         analysis_strategy=analysis_strategy,
     )
+
+def profile_wide_temporal_safe(
+    file_path: str,
+    inspection: dict,
+    analysis_strategy: dict,
+) -> dict:
+    """
+    Produce a safe profile for a wide temporal dataset.
+
+    Temporal facts are derived from structural evidence already
+    detected during source inspection. Expensive generic
+    profiling remains bypassed.
+    """
+
+    profile = profile_conservative_dataset(
+        file_path=file_path,
+        inspection=inspection,
+        analysis_strategy=analysis_strategy,
+    )
+
+    structural_model = inspection.get(
+        "structural_model",
+        {},
+    )
+
+    logical_structure = structural_model.get(
+        "logical_structure",
+        {},
+    )
+
+    temporal_axis = logical_structure.get(
+        "temporal_axis"
+    )
+
+    if temporal_axis is None:
+        return profile
+
+    start_index = temporal_axis.get(
+        "start_index"
+    )
+
+    end_index = temporal_axis.get(
+        "end_index"
+    )
+
+    temporal_column_count = None
+
+    if (
+        isinstance(start_index, int)
+        and isinstance(end_index, int)
+        and end_index >= start_index
+    ):
+        temporal_column_count = (
+            end_index - start_index + 1
+        )
+
+    non_temporal_column_count = None
+
+    if temporal_column_count is not None:
+        non_temporal_column_count = (
+            profile["column_count"]
+            - temporal_column_count
+        )
+
+    profile["wide_temporal"] = {
+        "status": "candidate",
+        "axis_orientation": temporal_axis.get(
+            "orientation"
+        ),
+        "temporal_column_start_index": start_index,
+        "temporal_column_end_index": end_index,
+        "temporal_column_count": temporal_column_count,
+        "non_temporal_column_count": (
+            non_temporal_column_count
+        ),
+        "format": temporal_axis.get(
+            "format"
+        ),
+        "range_start": temporal_axis.get(
+            "range_start"
+        ),
+        "range_end": temporal_axis.get(
+            "range_end"
+        ),
+        "order": temporal_axis.get(
+            "order"
+        ),
+        "distinct_timestamp_count": (
+            temporal_axis.get(
+                "distinct_count"
+            )
+        ),
+        "dominant_interval_seconds": (
+            temporal_axis.get(
+                "dominant_interval_seconds"
+            )
+        ),
+        "cadence_consistency": (
+            temporal_axis.get(
+                "cadence_consistency"
+            )
+        ),
+    }
+
+    return profile
 
 def profile_dataset_legacy(file_path: str) -> dict:
     path = Path(file_path)
