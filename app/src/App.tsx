@@ -61,6 +61,27 @@ type DatasetProfile = {
   missing_values: number;
   missing_percent: number;
   columns: ColumnInfo[];
+  wide_temporal?: WideTemporalProfile;
+};
+
+type WideTemporalProfile = {
+  status: string;
+  axis_orientation: string | null;
+
+  temporal_column_start_index: number | null;
+  temporal_column_end_index: number | null;
+
+  temporal_column_count: number | null;
+  non_temporal_column_count: number | null;
+
+  format: string | null;
+  range_start: string | null;
+  range_end: string | null;
+  order: string | null;
+
+  distinct_timestamp_count: number | null;
+  dominant_interval_seconds: number | null;
+  cadence_consistency: number | null;
 };
 
 type StructureInspectionResult = {
@@ -124,6 +145,38 @@ function formatProfileValue(value: string | number | null): string {
   }
 
   return String(value);
+}
+
+function formatCadence(
+  seconds: number | null,
+): string {
+  if (seconds === null) {
+    return "Unknown";
+  }
+
+  if (seconds === 86400) {
+    return "Daily";
+  }
+
+  if (seconds === 3600) {
+    return "Hourly";
+  }
+
+  if (seconds === 604800) {
+    return "Weekly";
+  }
+
+  if (seconds % 86400 === 0) {
+    const days = seconds / 86400;
+    return `${days} day${days === 1 ? "" : "s"}`;
+  }
+
+  if (seconds % 3600 === 0) {
+    const hours = seconds / 3600;
+    return `${hours} hour${hours === 1 ? "" : "s"}`;
+  }
+
+  return `${seconds.toLocaleString()} seconds`;
 }
 
 function getColumnSignals(
@@ -2124,6 +2177,75 @@ function App() {
                 {activeSection === "analysis" && profile && (
                   <div className="profile-result">
                     <div className="light-analysis-summary">
+                      {profile.wide_temporal && (
+                        <div className="analysis-group">
+                          <div className="analysis-group-header">
+                            <strong>Temporal structure</strong>
+                            <span>
+                              {profile.wide_temporal.status === "candidate"
+                                ? "Wide temporal candidate"
+                                : "Wide temporal"}
+                            </span>
+                          </div>
+
+                          <div className="analysis-group-content">
+                            <span>
+                              Temporal columns{" "}
+                              <strong>
+                                {profile.wide_temporal.temporal_column_count !== null
+                                  ? profile.wide_temporal.temporal_column_count.toLocaleString()
+                                  : "Unknown"}
+                              </strong>
+                            </span>
+
+                            <span>
+                              Other columns{" "}
+                              <strong>
+                                {profile.wide_temporal.non_temporal_column_count !== null
+                                  ? profile.wide_temporal.non_temporal_column_count.toLocaleString()
+                                  : "Unknown"}
+                              </strong>
+                            </span>
+
+                            <span>
+                              Time range{" "}
+                              <strong>
+                                {profile.wide_temporal.range_start &&
+                                  profile.wide_temporal.range_end
+                                  ? `${profile.wide_temporal.range_start.slice(0, 10)} – ${profile.wide_temporal.range_end.slice(0, 10)}`
+                                  : "Unknown"}
+                              </strong>
+                            </span>
+
+                            <span>
+                              Cadence{" "}
+                              <strong>
+                                {formatCadence(
+                                  profile.wide_temporal.dominant_interval_seconds,
+                                )}
+                              </strong>
+                            </span>
+
+                            <span>
+                              Sequence{" "}
+                              <strong>
+                                {profile.wide_temporal.order ?? "Unknown"}
+                              </strong>
+                            </span>
+
+                            <span>
+                              Cadence consistency{" "}
+                              <strong>
+                                {profile.wide_temporal.cadence_consistency !== null
+                                  ? `${(
+                                    profile.wide_temporal.cadence_consistency * 100
+                                  ).toFixed(1)}%`
+                                  : "Unknown"}
+                              </strong>
+                            </span>
+                          </div>
+                        </div>
+                      )}
                       <div className="analysis-group">
                         <div className="analysis-group-header">
                           <strong>Completeness</strong>
