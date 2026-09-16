@@ -33,14 +33,13 @@ type SemanticHint = {
 type ColumnInfo = {
   name: string;
   type: string;
-  null_count: number;
-  null_percent: number;
-  distinct_count: number;
-  unique_percent: number;
+  null_count: number | null;
+  null_percent: number | null;
+  distinct_count: number | null;
+  unique_percent: number | null;
   min: string | number | null;
   max: string | number | null;
   semantic_hint: SemanticHint | null;
-
 };
 type RowInspection = {
   filter: {
@@ -132,7 +131,38 @@ function getColumnSignals(
   rowCount: number
 ): string[] {
   const signals: string[] = [];
-  const nonNullCount = rowCount - column.null_count;
+
+  const nullCount = column.null_count;
+  const distinctCount = column.distinct_count;
+
+  if (nullCount === null || distinctCount === null) {
+    return signals;
+  }
+
+  const nonNullCount = rowCount - nullCount;
+
+  if (
+    nonNullCount > 0 &&
+    distinctCount === nonNullCount
+  ) {
+    signals.push("Unique");
+  }
+
+  if (distinctCount === 1) {
+    signals.push("Constant");
+  }
+
+  if (
+    nonNullCount > 0 &&
+    distinctCount > 1 &&
+    distinctCount <= 20
+  ) {
+    signals.push("Low cardinality");
+  }
+
+  if (nullCount > 0) {
+    signals.push("Missing");
+  }
 
   if (
     nonNullCount > 0 &&
@@ -141,19 +171,19 @@ function getColumnSignals(
     signals.push("Unique");
   }
 
-  if (column.distinct_count === 1) {
+  if (distinctCount === 1) {
     signals.push("Constant");
   }
 
   if (
     nonNullCount > 0 &&
-    column.distinct_count > 1 &&
-    column.distinct_count <= 20
+    distinctCount > 1 &&
+    distinctCount <= 20
   ) {
     signals.push("Low cardinality");
   }
 
-  if (column.null_count > 0) {
+  if (nullCount > 0) {
     signals.push("Missing");
   }
 
@@ -370,7 +400,7 @@ function App() {
 
       project.activeDatasetId = project.datasets[0].id;
 
-      const savedProjectPath = await invoke<string>("save_project_json", {
+      await invoke<string>("save_project_json", {
         projectId: project.id,
         projectJson: JSON.stringify(project, null, 2),
         projectRoot: appSettings?.defaultProjectRoot ?? null,
@@ -379,7 +409,6 @@ function App() {
       setActiveProject(project);
       setActiveSection("overview");
 
-      console.log("RAWSIGHT project saved:", savedProjectPath);
     } catch (err) {
       setError(String(err));
     } finally {
@@ -441,7 +470,6 @@ function App() {
         setFileInfo(null);
       }
 
-      console.log("RAWSIGHT project loaded:", project);
     } catch (err) {
       setError(`Could not open project: ${String(err)}`);
     }
@@ -810,14 +838,19 @@ function App() {
     setIsAnalyzing(true);
 
     try {
-      const rawProfile = await invoke<string>("profile_dataset", {
-        path: fileInfo.path,
-      });
+      const rawProfile = await invoke<string>(
+        "profile_dataset",
+        {
+          path: fileInfo.path,
+        },
+      );
 
-      const parsedProfile = JSON.parse(rawProfile) as DatasetProfile;
+      const parsedProfile =
+        JSON.parse(rawProfile) as DatasetProfile;
 
       setProfile(parsedProfile);
       setAnalysisComplete(true);
+
     } catch (err) {
       setError(String(err));
     } finally {
@@ -933,8 +966,6 @@ function App() {
     const structure = JSON.parse(
       rawStructure,
     ) as StructureInspectionResult;
-
-    console.log("RAWSIGHT structure inspection:", structure);
 
     return structure;
   }
@@ -2095,38 +2126,35 @@ function App() {
                     <div className="light-analysis-summary">
                       <div className="analysis-group">
                         <div className="analysis-group-header">
-                          <strong>Structure</strong>
-                          <span>Observed</span>
-                        </div>
-
-                        <div className="analysis-group-content">
-                          <span>
-                            <strong>{profile.rows.toLocaleString()}</strong> rows
-                          </span>
-
-                          <span>
-                            <strong>{profile.column_count.toLocaleString()}</strong> columns
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="analysis-group">
-                        <div className="analysis-group-header">
                           <strong>Completeness</strong>
                           <span>
-                            {profile.missing_values === 0 ? "No findings" : "Review"}
+                            {profile.missing_values === null
+                              ? "Not evaluated"
+                              : profile.missing_values === 0
+                                ? "No findings"
+                                : "Review"}
                           </span>
                         </div>
 
                         <div className="analysis-group-content">
-                          <span>
-                            <strong>{profile.missing_values.toLocaleString()}</strong>{" "}
-                            NULL values
-                          </span>
+                          {profile.missing_values === null ? (
+                            <span>Not evaluated by this analysis strategy</span>
+                          ) : (
+                            <>
+                              <span>
+                                <strong>
+                                  {profile.missing_values.toLocaleString()}
+                                </strong>{" "}
+                                NULL values
+                              </span>
 
-                          <span>
-                            {profile.missing_percent.toFixed(2)}% of all values
-                          </span>
+                              <span>
+                                {profile.missing_percent !== null
+                                  ? `${profile.missing_percent.toFixed(2)}% of all values`
+                                  : "Percentage not evaluated"}
+                              </span>
+                            </>
+                          )}
                         </div>
                       </div>
 
@@ -2134,19 +2162,33 @@ function App() {
                         <div className="analysis-group-header">
                           <strong>Duplicates</strong>
                           <span>
-                            {profile.duplicate_rows === 0 ? "No findings" : "Review"}
+                            {profile.duplicate_rows === null
+                              ? "Not evaluated"
+                              : profile.duplicate_rows === 0
+                                ? "No findings"
+                                : "Review"}
                           </span>
                         </div>
 
                         <div className="analysis-group-content">
-                          <span>
-                            <strong>{profile.duplicate_rows.toLocaleString()}</strong>{" "}
-                            exact duplicate rows
-                          </span>
+                          {profile.duplicate_rows === null ? (
+                            <span>Not evaluated by this analysis strategy</span>
+                          ) : (
+                            <>
+                              <span>
+                                <strong>
+                                  {profile.duplicate_rows.toLocaleString()}
+                                </strong>{" "}
+                                exact duplicate rows
+                              </span>
 
-                          <span>
-                            {profile.duplicate_percent.toFixed(2)}% of rows
-                          </span>
+                              <span>
+                                {profile.duplicate_percent !== null
+                                  ? `${profile.duplicate_percent.toFixed(2)}% of rows`
+                                  : "Percentage not evaluated"}
+                              </span>
+                            </>
+                          )}
                         </div>
                       </div>
 
@@ -2195,21 +2237,27 @@ function App() {
                             <span>
                               Missing{" "}
                               <strong>
-                                {column.null_count.toLocaleString()}
+                                {column.null_count === null
+                                  ? "Not evaluated"
+                                  : column.null_count.toLocaleString()}
                               </strong>
                             </span>
 
                             <span>
                               Distinct{" "}
                               <strong>
-                                {column.distinct_count.toLocaleString()}
+                                {column.distinct_count === null
+                                  ? "Not evaluated"
+                                  : column.distinct_count.toLocaleString()}
                               </strong>
                             </span>
 
                             <span>
                               Cardinality{" "}
                               <strong>
-                                {column.unique_percent.toFixed(1)}%
+                                {column.unique_percent === null
+                                  ? "Not evaluated"
+                                  : `${column.unique_percent.toFixed(1)}%`}
                               </strong>
                             </span>
 
