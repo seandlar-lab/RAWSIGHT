@@ -11,6 +11,60 @@ from .temporal_structure import (
 )
 
 
+
+def _summarize_temporal_axis_orientation(
+    temporal_candidates: list[dict],
+) -> dict:
+    """
+    Summarize which tabular orientation contains temporal-axis
+    evidence without deciding which individual candidate is the
+    semantic temporal axis.
+
+    Candidate counts are based on distinct structural positions,
+    so multiple valid date-format interpretations of the same
+    observed run do not inflate the counts.
+    """
+
+    positions = {
+        "horizontal": set(),
+        "vertical": set(),
+    }
+
+    for candidate in temporal_candidates:
+        orientation = candidate.get("orientation")
+
+        if orientation not in positions:
+            continue
+
+        positions[orientation].add((
+            candidate.get("sequence_index"),
+            candidate.get("start_index"),
+            candidate.get("end_index"),
+        ))
+
+    horizontal_count = len(
+        positions["horizontal"]
+    )
+    vertical_count = len(
+        positions["vertical"]
+    )
+
+    if horizontal_count and vertical_count:
+        orientation = "ambiguous"
+    elif horizontal_count:
+        orientation = "horizontal"
+    elif vertical_count:
+        orientation = "vertical"
+    else:
+        orientation = "none"
+
+    return {
+        "orientation": orientation,
+        "horizontal_candidate_count": horizontal_count,
+        "vertical_candidate_count": vertical_count,
+    }
+
+
 def infer_tabular_layout_candidate(
     temporal_axis: dict | None,
     structural_evidence: dict,
@@ -203,6 +257,11 @@ def analyze_tabular_logical_structure(
         # Temporal evidence.
         "temporal_axis": None,
         "temporal_axis_candidates": [],
+        "temporal_axis_orientation": {
+            "orientation": "none",
+            "horizontal_candidate_count": 0,
+            "vertical_candidate_count": 0,
+        },
 
         # Structural evidence.
         "structural_evidence": None,
@@ -255,6 +314,12 @@ def analyze_tabular_logical_structure(
     logical_structure[
         "temporal_axis_candidates"
     ] = temporal_candidates
+
+    logical_structure[
+        "temporal_axis_orientation"
+    ] = _summarize_temporal_axis_orientation(
+        temporal_candidates
+    )
 
     if temporal_candidates:
         logical_structure[
