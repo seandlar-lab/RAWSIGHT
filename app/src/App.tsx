@@ -14,7 +14,7 @@ import type {
   RawAnalysisColumnResult,
 } from "./types/rawAnalysis";
 import { RawAnalysisVisualization } from "./components/RawAnalysisVisualization";
-import { WideTemporalSeriesChart } from "./components/WideTemporalSeriesChart";
+import { WideTemporalSeriesDetailPanel } from "./components/WideTemporalSeriesDetailPanel";
 import type {
   WideTemporalSeriesDetail,
   WideTemporalSeriesPage,
@@ -425,6 +425,10 @@ function App() {
     isLoadingWideTemporalSeries,
     setIsLoadingWideTemporalSeries,
   ] = useState(false);
+  const [
+    wideTemporalSeriesLoadingIndex,
+    setWideTemporalSeriesLoadingIndex,
+  ] = useState<number | null>(null);
 
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [progressMessage, setProgressMessage] =
@@ -508,6 +512,7 @@ function App() {
     setWideTemporalSeriesPage(null);
     setWideTemporalSeriesDetail(null);
     setWideTemporalSeriesClassification("");
+    setWideTemporalSeriesLoadingIndex(null);
   }, [fileInfo?.path]);
 
   async function exitApplication() {
@@ -1066,6 +1071,7 @@ function App() {
     }
 
     setIsLoadingWideTemporalSeries(true);
+    setWideTemporalSeriesLoadingIndex(null);
     setError(null);
 
     try {
@@ -1103,6 +1109,19 @@ function App() {
       return null;
     }
 
+    if (
+      wideTemporalSeriesDetail?.series_index ===
+      seriesIndex
+    ) {
+      setWideTemporalSeriesDetail(null);
+      setWideTemporalSeriesLoadingIndex(null);
+      return null;
+    }
+
+    setWideTemporalSeriesDetail(null);
+    setWideTemporalSeriesLoadingIndex(
+      seriesIndex,
+    );
     setIsLoadingWideTemporalSeries(true);
     setError(null);
 
@@ -1119,13 +1138,18 @@ function App() {
         rawResult,
       ) as WideTemporalSeriesDetail;
 
-      setWideTemporalSeriesDetail(parsedResult);
+      setWideTemporalSeriesDetail(
+        parsedResult,
+      );
 
       return parsedResult;
     } catch (err) {
       setError(String(err));
       return null;
     } finally {
+      setWideTemporalSeriesLoadingIndex(
+        null,
+      );
       setIsLoadingWideTemporalSeries(false);
     }
   }
@@ -1855,53 +1879,100 @@ function App() {
                                             }}
                                           >
                                             {wideTemporalSeriesPage.series.map(
-                                              (series) => (
-                                                <button
-                                                  key={
-                                                    series.series_index
-                                                  }
-                                                  type="button"
-                                                  disabled={
-                                                    isLoadingWideTemporalSeries
-                                                  }
-                                                  onClick={() => {
-                                                    void loadWideTemporalSeriesDetail(
-                                                      series.series_index,
-                                                    );
-                                                  }}
-                                                  style={{
-                                                    textAlign: "left",
-                                                    display: "grid",
-                                                    gap: "4px",
-                                                  }}
-                                                >
-                                                  <strong>
-                                                    Series{" "}
-                                                    {series.series_index}
-                                                  </strong>
+                                              (series) => {
+                                                const isSelected =
+                                                  wideTemporalSeriesDetail?.series_index ===
+                                                  series.series_index;
 
-                                                  <span>
-                                                    {formatWideTemporalSeriesDescriptor(
-                                                      series,
-                                                    )}
-                                                  </span>
+                                                const isLoadingThisSeries =
+                                                  wideTemporalSeriesLoadingIndex ===
+                                                  series.series_index;
 
-                                                  <span>
-                                                    {
-                                                      series.classification
+                                                return (
+                                                  <div
+                                                    key={
+                                                      series.series_index
                                                     }
-                                                    {" · "}
-                                                    negative transitions{" "}
-                                                    {
-                                                      series.negative_transition_count
-                                                    }
-                                                    {" · "}
-                                                    largest negative change{" "}
-                                                    {series.largest_negative_change ??
-                                                      "—"}
-                                                  </span>
-                                                </button>
-                                              ),
+                                                    style={{
+                                                      display: "grid",
+                                                      gap: "8px",
+                                                    }}
+                                                  >
+                                                    <button
+                                                      type="button"
+                                                      disabled={
+                                                        isLoadingWideTemporalSeries &&
+                                                        !isLoadingThisSeries
+                                                      }
+                                                      onClick={() => {
+                                                        void loadWideTemporalSeriesDetail(
+                                                          series.series_index,
+                                                        );
+                                                      }}
+                                                      aria-expanded={
+                                                        isSelected
+                                                      }
+                                                      style={{
+                                                        textAlign: "left",
+                                                        display: "grid",
+                                                        gap: "4px",
+                                                        outline: isSelected
+                                                          ? "2px solid currentColor"
+                                                          : undefined,
+                                                        outlineOffset: isSelected
+                                                          ? "2px"
+                                                          : undefined,
+                                                      }}
+                                                    >
+                                                      <strong>
+                                                        Series{" "}
+                                                        {series.series_index}
+                                                      </strong>
+
+                                                      <span>
+                                                        {formatWideTemporalSeriesDescriptor(
+                                                          series,
+                                                        )}
+                                                      </span>
+
+                                                      <span>
+                                                        {
+                                                          series.classification
+                                                        }
+                                                        {" · "}
+                                                        negative transitions{" "}
+                                                        {
+                                                          series.negative_transition_count
+                                                        }
+                                                        {" · "}
+                                                        largest negative change{" "}
+                                                        {series.largest_negative_change ??
+                                                          "—"}
+                                                      </span>
+
+                                                      {isLoadingThisSeries && (
+                                                        <span>
+                                                          Loading details...
+                                                        </span>
+                                                      )}
+                                                    </button>
+
+                                                    {isSelected &&
+                                                      wideTemporalSeriesDetail && (
+                                                        <WideTemporalSeriesDetailPanel
+                                                          detail={
+                                                            wideTemporalSeriesDetail
+                                                          }
+                                                          onClose={() => {
+                                                            setWideTemporalSeriesDetail(
+                                                              null,
+                                                            );
+                                                          }}
+                                                        />
+                                                      )}
+                                                  </div>
+                                                );
+                                              },
                                             )}
                                           </div>
                                         )}
@@ -1959,157 +2030,6 @@ function App() {
                                   </div>
                                 </div>
 
-                                {wideTemporalSeriesDetail && (
-                                  <div className="analysis-group">
-                                    <div className="analysis-group-header">
-                                      <strong>
-                                        Series{" "}
-                                        {
-                                          wideTemporalSeriesDetail.series_index
-                                        }
-                                      </strong>
-                                      <span>
-                                        {
-                                          wideTemporalSeriesDetail.classification
-                                        }
-                                      </span>
-                                    </div>
-
-                                    <div
-                                      className="analysis-group-content"
-                                      style={{ gap: "12px" }}
-                                    >
-                                      <span>
-                                        Descriptor fields
-                                      </span>
-
-                                      <div
-                                        style={{
-                                          display: "grid",
-                                          gap: "4px",
-                                        }}
-                                      >
-                                        {wideTemporalSeriesDetail.descriptors.map(
-                                          (descriptor) => (
-                                            <span
-                                              key={
-                                                descriptor.column_index
-                                              }
-                                            >
-                                              <strong>
-                                                {
-                                                  descriptor.column_name
-                                                }
-                                              </strong>
-                                              {" = "}
-                                              {formatWideTemporalScalar(
-                                                descriptor.value,
-                                              )}
-                                            </span>
-                                          ),
-                                        )}
-                                      </div>
-
-                                      <span>
-                                        Time points{" "}
-                                        <strong>
-                                          {wideTemporalSeriesDetail.temporal_points.length.toLocaleString()}
-                                        </strong>
-                                      </span>
-
-                                      {wideTemporalSeriesDetail.temporal_points
-                                        .length > 0 && (
-                                        <span>
-                                          Observed range{" "}
-                                          <strong>
-                                            {
-                                              wideTemporalSeriesDetail
-                                                .temporal_points[0].label
-                                            }
-                                          </strong>
-                                          {" → "}
-                                          <strong>
-                                            {
-                                              wideTemporalSeriesDetail
-                                                .temporal_points[
-                                                wideTemporalSeriesDetail
-                                                  .temporal_points.length - 1
-                                              ].label
-                                            }
-                                          </strong>
-                                        </span>
-                                      )}
-
-                                      <WideTemporalSeriesChart
-                                        detail={
-                                          wideTemporalSeriesDetail
-                                        }
-                                      />
-
-                                      <span>
-                                        Negative transitions{" "}
-                                        <strong>
-                                          {wideTemporalSeriesDetail.negative_transition_count.toLocaleString()}
-                                        </strong>
-                                      </span>
-
-                                      <span>
-                                        Largest negative change{" "}
-                                        <strong>
-                                          {wideTemporalSeriesDetail.largest_negative_change ??
-                                            "—"}
-                                        </strong>
-                                      </span>
-
-                                      {wideTemporalSeriesDetail
-                                        .negative_transitions.length === 0 ? (
-                                        <span>
-                                          No negative adjacent transitions
-                                          observed.
-                                        </span>
-                                      ) : (
-                                        <div
-                                          style={{
-                                            display: "grid",
-                                            gap: "8px",
-                                          }}
-                                        >
-                                          {wideTemporalSeriesDetail.negative_transitions.map(
-                                            (transition) => (
-                                              <div
-                                                key={`${transition.from_index}-${transition.to_index}`}
-                                                style={{
-                                                  display: "grid",
-                                                  gap: "2px",
-                                                }}
-                                              >
-                                                <strong>
-                                                  {
-                                                    transition.from_label
-                                                  }
-                                                  {" → "}
-                                                  {transition.to_label}
-                                                </strong>
-
-                                                <span>
-                                                  {
-                                                    transition.previous_value
-                                                  }
-                                                  {" → "}
-                                                  {
-                                                    transition.current_value
-                                                  }
-                                                  {" · change "}
-                                                  {transition.change}
-                                                </span>
-                                              </div>
-                                            ),
-                                          )}
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                )}
                               </>
                             )}
 
