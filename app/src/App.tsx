@@ -52,16 +52,100 @@ type RowInspection = {
   rows: (string | number | boolean | null)[][];
 };
 
+type TemporalAxisOrientation = {
+  orientation: "horizontal" | "vertical" | "ambiguous" | "none";
+  horizontal_candidate_count: number;
+  vertical_candidate_count: number;
+};
+
+type AnalysisStrategyProfile = {
+  strategy:
+    | "wide_temporal"
+    | "long_temporal"
+    | "conservative_tabular"
+    | "conservative_unknown"
+    | string;
+  can_use_legacy_profile: boolean;
+  reason_codes: string[];
+};
+
+type StructuralTemporalAxis = {
+  orientation: "horizontal" | "vertical";
+  sequence_index: number;
+  start_index: number;
+  end_index: number;
+  length: number;
+  format: string | null;
+  range_start: string | null;
+  range_end: string | null;
+  order: string | null;
+};
+
+type StructuralModelProfile = {
+  logical_structure?: {
+    structure_type?: string;
+    temporal_axis?: StructuralTemporalAxis | null;
+    temporal_axis_candidates?: StructuralTemporalAxis[];
+    temporal_axis_orientation?: TemporalAxisOrientation;
+  };
+};
+
 type DatasetProfile = {
   file: string;
   rows: number;
   column_count: number;
-  duplicate_rows: number;
-  duplicate_percent: number;
-  missing_values: number;
-  missing_percent: number;
+  duplicate_rows: number | null;
+  duplicate_percent: number | null;
+  missing_values: number | null;
+  missing_percent: number | null;
   columns: ColumnInfo[];
+  analysis_strategy?: AnalysisStrategyProfile;
+  structural_model?: StructuralModelProfile;
   wide_temporal?: WideTemporalProfile;
+};
+
+type WideTemporalSeriesClassification = {
+  no_numeric_data: number;
+  insufficient_adjacent_observations: number;
+  constant: number;
+  non_decreasing: number;
+  non_increasing: number;
+  mixed: number;
+};
+
+type WideTemporalValueAnalysis = {
+  status: string;
+  analysis_kind: string;
+
+  series_count: number;
+  temporal_value_count: number;
+  numeric_value_count: number;
+  missing_value_count: number;
+  non_numeric_value_count: number;
+  zero_value_count: number;
+
+  numeric_min: number | null;
+  numeric_max: number | null;
+
+  adjacent_transition_count: number;
+  positive_transition_count: number;
+  negative_transition_count: number;
+  unchanged_transition_count: number;
+
+  largest_positive_change: number | null;
+  largest_negative_change: number | null;
+
+  series_with_missing_values: number;
+  series_with_non_numeric_values: number;
+  series_with_negative_transitions: number;
+
+  series_classification: WideTemporalSeriesClassification;
+};
+
+type WideTemporalValueExecution = {
+  status: string;
+  execution_mode: string;
+  rows_processed: number;
 };
 
 type WideTemporalProfile = {
@@ -82,6 +166,9 @@ type WideTemporalProfile = {
   distinct_timestamp_count: number | null;
   dominant_interval_seconds: number | null;
   cadence_consistency: number | null;
+
+  value_analysis?: WideTemporalValueAnalysis;
+  value_analysis_execution?: WideTemporalValueExecution;
 };
 
 type StructureInspectionResult = {
@@ -1317,7 +1404,7 @@ function App() {
                   onClick={() => setActiveSection("raw_analysis")}
                   className={activeSection === "raw_analysis" ? "active" : ""}
                 >
-                  Raw Analysis
+                  Explore
                 </button>
 
                 <button
@@ -1338,7 +1425,7 @@ function App() {
                   {activeSection === "lineup" && "The Lineup"}
                   {activeSection === "metadata" && "Metadata"}
                   {activeSection === "analysis" && "Light Analysis"}
-                  {activeSection === "raw_analysis" && "Raw Analysis"}
+                  {activeSection === "raw_analysis" && "Explore"}
                   {activeSection === "history" && "History"}
                 </div>
 
@@ -1351,7 +1438,7 @@ function App() {
                     <div>
                       <strong>Light Analysis</strong>
                       <p>
-                        Check structure, missing values, exact duplicates and basic data quality.
+                        Inspect structure and apply safe analysis appropriate to the detected data shape.
                         No changes will be made to your source data.
                       </p>
                     </div>
@@ -1373,294 +1460,598 @@ function App() {
                   <div className="metadata-workspace">
                     <div className="metadata-header">
                       <div>
-                        <strong>Raw Analysis</strong>
+                        <strong>Explore</strong>
                         <p>
-                          Explore deterministic findings and visualizations from your data.
+                          Explore the dataset using the structure detected by Light Analysis.
                         </p>
                       </div>
                     </div>
 
-                    {(() => {
-                      const activeDataset = activeProject.datasets.find(
-                        (dataset) =>
-                          dataset.id === activeProject.activeDatasetId,
-                      );
+                    {!profile ? (
+                      <div className="analysis-group">
+                        <div className="analysis-group-header">
+                          <strong>Structure required</strong>
+                          <span>Not detected</span>
+                        </div>
 
-                      const columns =
-                        activeDataset?.structure?.columns ?? [];
+                        <div className="analysis-group-content">
+                          <span>
+                            Run Light Analysis first. Explore uses the detected
+                            structure and analysis strategy rather than assuming
+                            that every dataset is column-oriented.
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      (() => {
+                        const activeDataset = activeProject.datasets.find(
+                          (dataset) =>
+                            dataset.id === activeProject.activeDatasetId,
+                        );
 
-                      const scopeColumns =
-                        activeDataset?.analysisScope?.columns ?? [];
+                        const columns =
+                          activeDataset?.structure?.columns ?? [];
 
-                      if (columns.length === 0) {
+                        const scopeColumns =
+                          activeDataset?.analysisScope?.columns ?? [];
+
+                        const strategy =
+                          profile.analysis_strategy?.strategy ??
+                          "conservative_unknown";
+
+                        const logicalStructure =
+                          profile.structural_model?.logical_structure;
+
+                        const orientation =
+                          logicalStructure?.temporal_axis_orientation
+                            ?.orientation ?? "none";
+
+                        const horizontalCandidateCount =
+                          logicalStructure?.temporal_axis_orientation
+                            ?.horizontal_candidate_count ?? 0;
+
+                        const verticalCandidateCount =
+                          logicalStructure?.temporal_axis_orientation
+                            ?.vertical_candidate_count ?? 0;
+
+                        const detectedTemporalAxis =
+                          logicalStructure?.temporal_axis;
+
+                        const detectedTemporalColumnName =
+                          detectedTemporalAxis?.orientation === "vertical" &&
+                          Number.isInteger(
+                            detectedTemporalAxis.sequence_index,
+                          )
+                            ? columns[
+                                detectedTemporalAxis.sequence_index
+                              ]?.name ?? ""
+                            : "";
+
+                        const selectedTemporalTimeColumn =
+                          temporalTimeColumn ||
+                          detectedTemporalColumnName;
+
+                        const selectedScopeColumn =
+                          scopeColumns.find(
+                            (column) =>
+                              column.columnName ===
+                              rawAnalysisColumnName,
+                          );
+
                         return (
-                          <p>
-                            No observed column structure available.
-                          </p>
-                        );
-                      }
+                          <>
+                            <div className="analysis-group">
+                              <div className="analysis-group-header">
+                                <strong>Detected structure</strong>
+                                <span>{strategy}</span>
+                              </div>
 
-                      const selectedScopeColumn =
-                        scopeColumns.find(
-                          (column) =>
-                            column.columnName === rawAnalysisColumnName,
-                        );
+                              <div className="analysis-group-content">
+                                <span>
+                                  Temporal orientation{" "}
+                                  <strong>{orientation}</strong>
+                                </span>
 
-                      return (
-                        <>
-                          <div
-                            style={{
-                              marginTop: "24px",
-                              marginBottom: "24px",
-                            }}
-                          >
-                            <select
-                              value={rawAnalysisColumnName}
-                              onChange={(event) => {
-                                setRawAnalysisColumnName(
-                                  event.target.value,
-                                );
-                                setRawAnalysisResult(null);
-                              }}
-                            >
-                              <option value="">
-                                Choose a column
-                              </option>
+                                <span>
+                                  Horizontal candidates{" "}
+                                  <strong>
+                                    {horizontalCandidateCount.toLocaleString()}
+                                  </strong>
+                                </span>
 
-                              {columns.map((column) => (
-                                <option
-                                  key={column.name}
-                                  value={column.name}
-                                >
-                                  {column.name}
-                                </option>
-                              ))}
-                            </select>
+                                <span>
+                                  Vertical candidates{" "}
+                                  <strong>
+                                    {verticalCandidateCount.toLocaleString()}
+                                  </strong>
+                                </span>
+                              </div>
+                            </div>
 
-                            <button
-                              type="button"
-                              disabled={!rawAnalysisColumnName}
-                              onClick={() => {
-                                void runRawAnalysisColumn(
-                                  rawAnalysisColumnName,
-                                  selectedScopeColumn?.role,
-                                );
-                              }}
-                            >
-                              Run Raw Analysis
-                            </button>
+                            {strategy === "wide_temporal" && (
+                              <>
+                                <div className="analysis-group">
+                                  <div className="analysis-group-header">
+                                    <strong>Series Explorer</strong>
+                                    <span>Horizontal temporal axis</span>
+                                  </div>
 
-                            {rawAnalysisResult && (
-                              <p>
-                                Result:{" "}
-                                <strong>
-                                  {rawAnalysisResult.column}
-                                </strong>
-                                {" · "}
-                                {rawAnalysisResult.routing}
-                              </p>
+                                  <div className="analysis-group-content">
+                                    <span>
+                                      RAWSIGHT detected a horizontal temporal
+                                      structure. The time axis is already known,
+                                      so no time-column selection is required.
+                                    </span>
+
+                                    {profile.wide_temporal?.value_analysis && (
+                                      <>
+                                        <span>
+                                          Series{" "}
+                                          <strong>
+                                            {profile.wide_temporal.value_analysis.series_count.toLocaleString()}
+                                          </strong>
+                                        </span>
+
+                                        <span>
+                                          Mixed series{" "}
+                                          <strong>
+                                            {profile.wide_temporal.value_analysis.series_classification.mixed.toLocaleString()}
+                                          </strong>
+                                        </span>
+
+                                        <span>
+                                          Series with decreases{" "}
+                                          <strong>
+                                            {profile.wide_temporal.value_analysis.series_with_negative_transitions.toLocaleString()}
+                                          </strong>
+                                        </span>
+
+                                        <span>
+                                          Constant series{" "}
+                                          <strong>
+                                            {profile.wide_temporal.value_analysis.series_classification.constant.toLocaleString()}
+                                          </strong>
+                                        </span>
+                                      </>
+                                    )}
+
+                                    <span>
+                                      Series-level drill-down will use this
+                                      detected structure rather than treating
+                                      the temporal columns as unrelated fields.
+                                    </span>
+                                  </div>
+                                </div>
+                              </>
                             )}
-                            {rawAnalysisResult && (
-                              <RawAnalysisVisualization
-                                result={rawAnalysisResult}
-                              />
+
+                            {strategy === "long_temporal" && (
+                              <div className="analysis-group">
+                                <div className="analysis-group-header">
+                                  <strong>Time / Value Explorer</strong>
+                                  <span>Vertical temporal axis</span>
+                                </div>
+
+                                <div className="analysis-group-content">
+                                  <span>
+                                    Detected time field{" "}
+                                    <strong>
+                                      {detectedTemporalColumnName ||
+                                        "Unknown"}
+                                    </strong>
+                                  </span>
+                                </div>
+
+                                {columns.length === 0 ? (
+                                  <p>
+                                    No observed column structure available.
+                                  </p>
+                                ) : (
+                                  <div
+                                    style={{
+                                      marginTop: "24px",
+                                      marginBottom: "24px",
+                                    }}
+                                  >
+                                    <select
+                                      value={selectedTemporalTimeColumn}
+                                      onChange={(event) =>
+                                        setTemporalTimeColumn(
+                                          event.target.value,
+                                        )
+                                      }
+                                    >
+                                      <option value="">
+                                        Choose time column
+                                      </option>
+
+                                      {columns.map((column) => (
+                                        <option
+                                          key={column.name}
+                                          value={column.name}
+                                        >
+                                          {column.name}
+                                        </option>
+                                      ))}
+                                    </select>
+
+                                    <select
+                                      value={temporalValueColumn}
+                                      onChange={(event) =>
+                                        setTemporalValueColumn(
+                                          event.target.value,
+                                        )
+                                      }
+                                    >
+                                      <option value="">
+                                        Choose value column
+                                      </option>
+
+                                      {columns.map((column) => (
+                                        <option
+                                          key={column.name}
+                                          value={column.name}
+                                        >
+                                          {column.name}
+                                        </option>
+                                      ))}
+                                    </select>
+
+                                    <button
+                                      type="button"
+                                      disabled={
+                                        !selectedTemporalTimeColumn ||
+                                        !temporalValueColumn
+                                      }
+                                      onClick={async () => {
+                                        const result =
+                                          await runNumericTemporalAnalysis(
+                                            selectedTemporalTimeColumn,
+                                            temporalValueColumn,
+                                          );
+
+                                        setTemporalAnalysisResult(
+                                          result,
+                                        );
+                                      }}
+                                    >
+                                      Run Temporal Analysis
+                                    </button>
+
+                                    {temporalAnalysisResult && (
+                                      <div>
+                                        <h4>
+                                          Temporal Analysis Summary
+                                        </h4>
+
+                                        <p>
+                                          <strong>Time column:</strong>{" "}
+                                          {
+                                            temporalAnalysisResult.time_column
+                                          }
+                                        </p>
+
+                                        <p>
+                                          <strong>Value column:</strong>{" "}
+                                          {
+                                            temporalAnalysisResult.value_column
+                                          }
+                                        </p>
+
+                                        <p>
+                                          <strong>Status:</strong>{" "}
+                                          {
+                                            temporalAnalysisResult.series
+                                              .status
+                                          }
+                                        </p>
+
+                                        <p>
+                                          <strong>Usable rows:</strong>{" "}
+                                          {
+                                            temporalAnalysisResult.series
+                                              .usable_rows
+                                          }
+                                        </p>
+
+                                        <p>
+                                          <strong>
+                                            Distinct time points:
+                                          </strong>{" "}
+                                          {
+                                            temporalAnalysisResult.series
+                                              .distinct_time_points
+                                          }
+                                        </p>
+
+                                        <p>
+                                          <strong>Bucketed:</strong>{" "}
+                                          {temporalAnalysisResult.series
+                                            .bucketed
+                                            ? "Yes"
+                                            : "No"}
+                                        </p>
+
+                                        <h4>Trend</h4>
+
+                                        <p>
+                                          <strong>
+                                            First observation:
+                                          </strong>{" "}
+                                          {formatTemporalTimestamp(
+                                            temporalAnalysisResult.trend
+                                              .first_observation,
+                                          )}
+                                        </p>
+
+                                        <p>
+                                          <strong>
+                                            Last observation:
+                                          </strong>{" "}
+                                          {formatTemporalTimestamp(
+                                            temporalAnalysisResult.trend
+                                              .last_observation,
+                                          )}
+                                        </p>
+
+                                        <p>
+                                          <strong>
+                                            Slope per day:
+                                          </strong>{" "}
+                                          {
+                                            temporalAnalysisResult.trend
+                                              .slope_per_day
+                                          }
+                                        </p>
+
+                                        <p>
+                                          <strong>
+                                            Time correlation:
+                                          </strong>{" "}
+                                          {
+                                            temporalAnalysisResult.trend
+                                              .pearson_time_correlation
+                                          }
+                                        </p>
+
+                                        <p>
+                                          <strong>R²:</strong>{" "}
+                                          {
+                                            temporalAnalysisResult.trend
+                                              .r_squared
+                                          }
+                                        </p>
+
+                                        <h4>Cadence</h4>
+
+                                        <p>
+                                          <strong>Intervals:</strong>{" "}
+                                          {
+                                            temporalAnalysisResult.cadence
+                                              .interval_count
+                                          }
+                                        </p>
+
+                                        <p>
+                                          <strong>
+                                            Median interval:
+                                          </strong>{" "}
+                                          {formatDurationSeconds(
+                                            temporalAnalysisResult.cadence
+                                              .median_interval_seconds,
+                                          )}
+                                        </p>
+
+                                        <h4>Gaps</h4>
+
+                                        <p>
+                                          <strong>Status:</strong>{" "}
+                                          {
+                                            temporalAnalysisResult.gaps
+                                              .status
+                                          }
+                                        </p>
+
+                                        <p>
+                                          <strong>Gap count:</strong>{" "}
+                                          {
+                                            temporalAnalysisResult.gaps
+                                              .gap_count
+                                          }
+                                        </p>
+
+                                        <p>
+                                          <strong>
+                                            Gap threshold:
+                                          </strong>{" "}
+                                          {formatDurationSeconds(
+                                            temporalAnalysisResult.gaps
+                                              .gap_threshold_seconds,
+                                          )}
+                                        </p>
+
+                                        {temporalAnalysisResult.gaps.gaps
+                                          .length > 0 && (
+                                          <>
+                                            <h4>Detected gaps</h4>
+
+                                            <table className="temporal-gap-table">
+                                              <thead>
+                                                <tr>
+                                                  <th>From</th>
+                                                  <th>To</th>
+                                                  <th>Duration</th>
+                                                  <th>× median</th>
+                                                </tr>
+                                              </thead>
+
+                                              <tbody>
+                                                {temporalAnalysisResult.gaps.gaps.map(
+                                                  (gap) => (
+                                                    <tr
+                                                      key={`${gap.from}-${gap.to}`}
+                                                    >
+                                                      <td>
+                                                        {formatTemporalTimestamp(
+                                                          gap.from,
+                                                        )}
+                                                      </td>
+                                                      <td>
+                                                        {formatTemporalTimestamp(
+                                                          gap.to,
+                                                        )}
+                                                      </td>
+                                                      <td>
+                                                        {formatDurationSeconds(
+                                                          gap.interval_seconds,
+                                                        )}
+                                                      </td>
+                                                      <td>
+                                                        {
+                                                          gap.multiple_of_median
+                                                        }
+                                                      </td>
+                                                    </tr>
+                                                  ),
+                                                )}
+                                              </tbody>
+                                            </table>
+                                          </>
+                                        )}
+
+                                        <details>
+                                          <summary>Raw JSON</summary>
+                                          <pre>
+                                            {JSON.stringify(
+                                              temporalAnalysisResult,
+                                              null,
+                                              2,
+                                            )}
+                                          </pre>
+                                        </details>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
                             )}
-                            <div>
-                              <h3>Numeric Temporal Analysis</h3>
 
-                              <select
-                                value={temporalTimeColumn}
-                                onChange={(event) =>
-                                  setTemporalTimeColumn(event.target.value)
-                                }
-                              >
-                                <option value="">Choose time column</option>
+                            {strategy === "conservative_tabular" &&
+                              orientation === "ambiguous" && (
+                                <div className="analysis-group">
+                                  <div className="analysis-group-header">
+                                    <strong>Candidate Explorer</strong>
+                                    <span>Ambiguous orientation</span>
+                                  </div>
 
-                                {columns.map((column) => (
-                                  <option
-                                    key={column.name}
-                                    value={column.name}
-                                  >
-                                    {column.name}
-                                  </option>
-                                ))}
-                              </select>
+                                  <div className="analysis-group-content">
+                                    <span>
+                                      Temporal structure was detected in both
+                                      directions. RAWSIGHT will not choose an
+                                      axis automatically.
+                                    </span>
 
-                              <select
-                                value={temporalValueColumn}
-                                onChange={(event) =>
-                                  setTemporalValueColumn(event.target.value)
-                                }
-                              >
-                                <option value="">Choose value column</option>
+                                    <span>
+                                      Horizontal candidates{" "}
+                                      <strong>
+                                        {horizontalCandidateCount.toLocaleString()}
+                                      </strong>
+                                    </span>
 
-                                {columns.map((column) => (
-                                  <option
-                                    key={column.name}
-                                    value={column.name}
-                                  >
-                                    {column.name}
-                                  </option>
-                                ))}
-                              </select>
-
-                              <button
-                                type="button"
-                                disabled={
-                                  !temporalTimeColumn ||
-                                  !temporalValueColumn
-                                }
-                                onClick={async () => {
-                                  const result = await runNumericTemporalAnalysis(
-                                    temporalTimeColumn,
-                                    temporalValueColumn,
-                                  );
-
-                                  setTemporalAnalysisResult(result);
-                                }}
-                              >
-                                Run Temporal Analysis
-                              </button>
-                              {temporalAnalysisResult && (
-                                <div>
-                                  <h4>Temporal Analysis Summary</h4>
-
-                                  <p>
-                                    <strong>Time column:</strong>{" "}
-                                    {temporalAnalysisResult.time_column}
-                                  </p>
-
-                                  <p>
-                                    <strong>Value column:</strong>{" "}
-                                    {temporalAnalysisResult.value_column}
-                                  </p>
-
-                                  <p>
-                                    <strong>Status:</strong>{" "}
-                                    {temporalAnalysisResult.series.status}
-                                  </p>
-
-                                  <p>
-                                    <strong>Usable rows:</strong>{" "}
-                                    {temporalAnalysisResult.series.usable_rows}
-                                  </p>
-
-                                  <p>
-                                    <strong>Distinct time points:</strong>{" "}
-                                    {temporalAnalysisResult.series.distinct_time_points}
-                                  </p>
-
-                                  <p>
-                                    <strong>Bucketed:</strong>{" "}
-                                    {temporalAnalysisResult.series.bucketed ? "Yes" : "No"}
-                                  </p>
-
-                                  <h4>Trend</h4>
-
-                                  <p>
-                                    <strong>First observation:</strong>{" "}
-                                    {formatTemporalTimestamp(
-                                      temporalAnalysisResult.trend.first_observation,
-                                    )}
-                                  </p>
-
-                                  <p>
-                                    <strong>Last observation:</strong>{" "}
-                                    {formatTemporalTimestamp(
-                                      temporalAnalysisResult.trend.last_observation,
-                                    )}
-                                  </p>
-
-                                  <p>
-                                    <strong>Slope per day:</strong>{" "}
-                                    {temporalAnalysisResult.trend.slope_per_day}
-                                  </p>
-
-                                  <p>
-                                    <strong>Time correlation:</strong>{" "}
-                                    {temporalAnalysisResult.trend.pearson_time_correlation}
-                                  </p>
-
-                                  <p>
-                                    <strong>R²:</strong>{" "}
-                                    {temporalAnalysisResult.trend.r_squared}
-                                  </p>
-
-                                  <h4>Cadence</h4>
-
-                                  <p>
-                                    <strong>Intervals:</strong>{" "}
-                                    {temporalAnalysisResult.cadence.interval_count}
-                                  </p>
-
-                                  <p>
-                                    <strong>Median interval:</strong>{" "}
-                                    {formatDurationSeconds(
-                                      temporalAnalysisResult.cadence.median_interval_seconds,
-                                    )}
-                                  </p>
-
-                                  <h4>Gaps</h4>
-
-                                  <p>
-                                    <strong>Status:</strong>{" "}
-                                    {temporalAnalysisResult.gaps.status}
-                                  </p>
-
-                                  <p>
-                                    <strong>Gap count:</strong>{" "}
-                                    {temporalAnalysisResult.gaps.gap_count}
-                                  </p>
-
-                                  <p>
-                                    <strong>Gap threshold:</strong>{" "}
-                                    {formatDurationSeconds(
-                                      temporalAnalysisResult.gaps.gap_threshold_seconds,
-                                    )}
-                                  </p>
-
-                                  {temporalAnalysisResult.gaps.gaps.length > 0 && (
-                                    <>
-                                      <h4>Detected gaps</h4>
-
-                                      <table className="temporal-gap-table">
-                                        <thead>
-                                          <tr>
-                                            <th>From</th>
-                                            <th>To</th>
-                                            <th>Duration</th>
-                                            <th>× median</th>
-                                          </tr>
-                                        </thead>
-
-                                        <tbody>
-                                          {temporalAnalysisResult.gaps.gaps.map((gap) => (
-                                            <tr key={`${gap.from}-${gap.to}`}>
-                                              <td>{formatTemporalTimestamp(gap.from)}</td>
-                                              <td>{formatTemporalTimestamp(gap.to)}</td>
-                                              <td>{formatDurationSeconds(gap.interval_seconds)}</td>
-                                              <td>{gap.multiple_of_median}</td>
-                                            </tr>
-                                          ))}
-                                        </tbody>
-                                      </table>
-                                    </>
-                                  )}
-
-                                  <details>
-                                    <summary>Raw JSON</summary>
-                                    <pre>
-                                      {JSON.stringify(temporalAnalysisResult, null, 2)}
-                                    </pre>
-                                  </details>
+                                    <span>
+                                      Vertical candidates{" "}
+                                      <strong>
+                                        {verticalCandidateCount.toLocaleString()}
+                                      </strong>
+                                    </span>
+                                  </div>
                                 </div>
                               )}
-                            </div>
-                          </div>
 
-                        </>
-                      );
-                    })()}
+                            {(strategy === "conservative_tabular" &&
+                              orientation !== "ambiguous") ||
+                            strategy === "conservative_unknown" ? (
+                              <div className="analysis-group">
+                                <div className="analysis-group-header">
+                                  <strong>Column Explorer</strong>
+                                  <span>Tabular exploration</span>
+                                </div>
+
+                                {columns.length === 0 ? (
+                                  <div className="analysis-group-content">
+                                    <span>
+                                      No observed column structure available.
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <div
+                                    style={{
+                                      marginTop: "24px",
+                                      marginBottom: "24px",
+                                    }}
+                                  >
+                                    <select
+                                      value={rawAnalysisColumnName}
+                                      onChange={(event) => {
+                                        setRawAnalysisColumnName(
+                                          event.target.value,
+                                        );
+                                        setRawAnalysisResult(null);
+                                      }}
+                                    >
+                                      <option value="">
+                                        Choose a column
+                                      </option>
+
+                                      {columns.map((column) => (
+                                        <option
+                                          key={column.name}
+                                          value={column.name}
+                                        >
+                                          {column.name}
+                                        </option>
+                                      ))}
+                                    </select>
+
+                                    <button
+                                      type="button"
+                                      disabled={
+                                        !rawAnalysisColumnName
+                                      }
+                                      onClick={() => {
+                                        void runRawAnalysisColumn(
+                                          rawAnalysisColumnName,
+                                          selectedScopeColumn?.role,
+                                        );
+                                      }}
+                                    >
+                                      Explore Column
+                                    </button>
+
+                                    {rawAnalysisResult && (
+                                      <p>
+                                        Result:{" "}
+                                        <strong>
+                                          {rawAnalysisResult.column}
+                                        </strong>
+                                        {" · "}
+                                        {rawAnalysisResult.routing}
+                                      </p>
+                                    )}
+
+                                    {rawAnalysisResult && (
+                                      <RawAnalysisVisualization
+                                        result={rawAnalysisResult}
+                                      />
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            ) : null}
+                          </>
+                        );
+                      })()
+                    )}
                   </div>
                 )}
                 {activeSection === "lineup" && (
@@ -2246,6 +2637,195 @@ function App() {
                           </div>
                         </div>
                       )}
+
+                      {profile.wide_temporal?.value_analysis && (
+                        <>
+                          <div className="analysis-group">
+                            <div className="analysis-group-header">
+                              <strong>Temporal value analysis</strong>
+                              <span>
+                                {profile.wide_temporal.value_analysis.status === "measured"
+                                  ? "Measured"
+                                  : profile.wide_temporal.value_analysis.status}
+                              </span>
+                            </div>
+
+                            <div className="analysis-group-content">
+                              <span>
+                                Series{" "}
+                                <strong>
+                                  {profile.wide_temporal.value_analysis.series_count.toLocaleString()}
+                                </strong>
+                              </span>
+
+                              <span>
+                                Values analysed{" "}
+                                <strong>
+                                  {profile.wide_temporal.value_analysis.temporal_value_count.toLocaleString()}
+                                </strong>
+                              </span>
+
+                              <span>
+                                Numeric values{" "}
+                                <strong>
+                                  {profile.wide_temporal.value_analysis.numeric_value_count.toLocaleString()}
+                                </strong>
+                              </span>
+
+                              <span>
+                                Missing{" "}
+                                <strong>
+                                  {profile.wide_temporal.value_analysis.missing_value_count.toLocaleString()}
+                                </strong>
+                              </span>
+
+                              <span>
+                                Non-numeric{" "}
+                                <strong>
+                                  {profile.wide_temporal.value_analysis.non_numeric_value_count.toLocaleString()}
+                                </strong>
+                              </span>
+
+                              <span>
+                                Zero values{" "}
+                                <strong>
+                                  {profile.wide_temporal.value_analysis.zero_value_count.toLocaleString()}
+                                </strong>
+                              </span>
+
+                              {profile.wide_temporal.value_analysis_execution && (
+                                <span>
+                                  Execution{" "}
+                                  <strong>
+                                    {profile.wide_temporal.value_analysis_execution.execution_mode}
+                                  </strong>
+                                  {" · "}
+                                  {profile.wide_temporal.value_analysis_execution.rows_processed.toLocaleString()}
+                                  {" rows"}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="analysis-group">
+                            <div className="analysis-group-header">
+                              <strong>Series behaviour</strong>
+                              <span>Observed</span>
+                            </div>
+
+                            <div className="analysis-group-content">
+                              <span>
+                                Constant{" "}
+                                <strong>
+                                  {profile.wide_temporal.value_analysis.series_classification.constant.toLocaleString()}
+                                </strong>
+                              </span>
+
+                              <span>
+                                Non-decreasing{" "}
+                                <strong>
+                                  {profile.wide_temporal.value_analysis.series_classification.non_decreasing.toLocaleString()}
+                                </strong>
+                              </span>
+
+                              <span>
+                                Non-increasing{" "}
+                                <strong>
+                                  {profile.wide_temporal.value_analysis.series_classification.non_increasing.toLocaleString()}
+                                </strong>
+                              </span>
+
+                              <span>
+                                Mixed{" "}
+                                <strong>
+                                  {profile.wide_temporal.value_analysis.series_classification.mixed.toLocaleString()}
+                                </strong>
+                              </span>
+
+                              {profile.wide_temporal.value_analysis.series_classification
+                                .insufficient_adjacent_observations > 0 && (
+                                <span>
+                                  Insufficient adjacent observations{" "}
+                                  <strong>
+                                    {profile.wide_temporal.value_analysis.series_classification
+                                      .insufficient_adjacent_observations.toLocaleString()}
+                                  </strong>
+                                </span>
+                              )}
+
+                              {profile.wide_temporal.value_analysis.series_classification
+                                .no_numeric_data > 0 && (
+                                <span>
+                                  No numeric observations{" "}
+                                  <strong>
+                                    {profile.wide_temporal.value_analysis.series_classification
+                                      .no_numeric_data.toLocaleString()}
+                                  </strong>
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="analysis-group">
+                            <div className="analysis-group-header">
+                              <strong>Observed transitions</strong>
+                              <span>
+                                {profile.wide_temporal.value_analysis.adjacent_transition_count.toLocaleString()}
+                                {" comparable"}
+                              </span>
+                            </div>
+
+                            <div className="analysis-group-content">
+                              <span>
+                                Increase{" "}
+                                <strong>
+                                  {profile.wide_temporal.value_analysis.positive_transition_count.toLocaleString()}
+                                </strong>
+                              </span>
+
+                              <span>
+                                Decrease{" "}
+                                <strong>
+                                  {profile.wide_temporal.value_analysis.negative_transition_count.toLocaleString()}
+                                </strong>
+                              </span>
+
+                              <span>
+                                Unchanged{" "}
+                                <strong>
+                                  {profile.wide_temporal.value_analysis.unchanged_transition_count.toLocaleString()}
+                                </strong>
+                              </span>
+
+                              <span>
+                                Series with decreases{" "}
+                                <strong>
+                                  {profile.wide_temporal.value_analysis.series_with_negative_transitions.toLocaleString()}
+                                </strong>
+                              </span>
+
+                              <span>
+                                Largest increase{" "}
+                                <strong>
+                                  {profile.wide_temporal.value_analysis.largest_positive_change !== null
+                                    ? profile.wide_temporal.value_analysis.largest_positive_change.toLocaleString()
+                                    : "Not observed"}
+                                </strong>
+                              </span>
+
+                              <span>
+                                Largest decrease{" "}
+                                <strong>
+                                  {profile.wide_temporal.value_analysis.largest_negative_change !== null
+                                    ? profile.wide_temporal.value_analysis.largest_negative_change.toLocaleString()
+                                    : "Not observed"}
+                                </strong>
+                              </span>
+                            </div>
+                          </div>
+                        </>
+                      )}
+
                       <div className="analysis-group">
                         <div className="analysis-group-header">
                           <strong>Completeness</strong>
