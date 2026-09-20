@@ -8,9 +8,12 @@ def select_analysis_strategy(
     Select a safe analysis strategy from observed structural
     evidence.
 
-    Routing is safety-oriented. A structural candidate may be
-    sufficient to avoid an unsafe generic analysis path even
-    when semantic interpretation is not yet definitive.
+    Temporal-axis orientation is the primary routing fact.
+    A specialized temporal strategy is selected only when one
+    temporal axis has also been promoted unambiguously.
+
+    Structural orientation and semantic axis selection remain
+    separate decisions.
     """
 
     logical = structural_model.get(
@@ -28,8 +31,8 @@ def select_analysis_strategy(
         "unknown",
     )
 
-    layout_candidate = logical.get(
-        "layout_candidate"
+    temporal_axis = logical.get(
+        "temporal_axis"
     )
 
     temporal_candidates = logical.get(
@@ -37,16 +40,52 @@ def select_analysis_strategy(
         [],
     )
 
+    orientation_summary = logical.get(
+        "temporal_axis_orientation",
+        {},
+    )
+
+    orientation = orientation_summary.get(
+        "orientation"
+    )
+
     reasons = []
 
-    if layout_candidate is not None:
-        layout_kind = layout_candidate.get(
-            "kind"
-        )
+    # Backward-compatible fallback for structural models created
+    # before temporal_axis_orientation became part of the common
+    # contract. Current inspection paths always populate it.
+    if orientation is None:
+        if temporal_axis is not None:
+            orientation = temporal_axis.get(
+                "orientation"
+            )
+        elif temporal_candidates:
+            candidate_orientations = {
+                candidate.get("orientation")
+                for candidate in temporal_candidates
+                if candidate.get("orientation")
+                in {"horizontal", "vertical"}
+            }
 
-        if layout_kind == "wide_temporal":
+            if candidate_orientations == {"horizontal"}:
+                orientation = "horizontal"
+            elif candidate_orientations == {"vertical"}:
+                orientation = "vertical"
+            elif candidate_orientations:
+                orientation = "ambiguous"
+            else:
+                orientation = "none"
+        else:
+            orientation = "none"
+
+    if orientation == "horizontal":
+        if (
+            temporal_axis is not None
+            and temporal_axis.get("orientation")
+            == "horizontal"
+        ):
             reasons.append(
-                "wide_temporal_layout_candidate"
+                "horizontal_temporal_axis_promoted"
             )
 
             return {
@@ -55,9 +94,24 @@ def select_analysis_strategy(
                 "reason_codes": reasons,
             }
 
-        if layout_kind == "long_temporal":
+        reasons.append(
+            "horizontal_temporal_structure_without_promoted_axis"
+        )
+
+        return {
+            "strategy": "conservative_tabular",
+            "can_use_legacy_profile": False,
+            "reason_codes": reasons,
+        }
+
+    if orientation == "vertical":
+        if (
+            temporal_axis is not None
+            and temporal_axis.get("orientation")
+            == "vertical"
+        ):
             reasons.append(
-                "long_temporal_layout_candidate"
+                "vertical_temporal_axis_promoted"
             )
 
             return {
@@ -66,9 +120,30 @@ def select_analysis_strategy(
                 "reason_codes": reasons,
             }
 
+        reasons.append(
+            "vertical_temporal_structure_without_promoted_axis"
+        )
+
+        return {
+            "strategy": "conservative_tabular",
+            "can_use_legacy_profile": False,
+            "reason_codes": reasons,
+        }
+
+    if orientation == "ambiguous":
+        reasons.append(
+            "temporal_axis_orientation_ambiguous"
+        )
+
+        return {
+            "strategy": "conservative_tabular",
+            "can_use_legacy_profile": False,
+            "reason_codes": reasons,
+        }
+
     if temporal_candidates:
         reasons.append(
-            "temporal_structure_is_ambiguous"
+            "temporal_candidates_without_supported_orientation"
         )
 
         return {

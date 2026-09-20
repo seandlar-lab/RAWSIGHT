@@ -39,6 +39,11 @@ def create_structural_model(
             # Temporal evidence.
             "temporal_axis": None,
             "temporal_axis_candidates": [],
+            "temporal_axis_orientation": {
+                "orientation": "none",
+                "horizontal_candidate_count": 0,
+                "vertical_candidate_count": 0,
+            },
 
             # Structural evidence.
             "structural_evidence": None,
