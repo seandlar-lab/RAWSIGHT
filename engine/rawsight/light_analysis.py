@@ -8,6 +8,9 @@ from rawsight.datasets import (
     open_dataset,
     select_analysis_strategy,
 )
+from rawsight.wide_temporal_execution import (
+    execute_wide_temporal_analysis,
+)
 
 NUMERIC_TYPES = (
     "TINYINT",
@@ -375,6 +378,32 @@ def profile_wide_temporal_safe(
             temporal_axis.get(
                 "cadence_consistency"
             )
+        ),
+    }
+
+    value_execution = execute_wide_temporal_analysis(
+        file_path=file_path,
+        temporal_axis=temporal_axis,
+        progress=progress,
+    )
+
+    profile["wide_temporal"]["value_analysis"] = (
+        value_execution.get(
+            "analysis"
+        )
+    )
+
+    profile["wide_temporal"][
+        "value_analysis_execution"
+    ] = {
+        "status": value_execution.get(
+            "status"
+        ),
+        "execution_mode": value_execution.get(
+            "execution_mode"
+        ),
+        "rows_processed": value_execution.get(
+            "rows_processed"
         ),
     }
 
