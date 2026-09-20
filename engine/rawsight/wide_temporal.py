@@ -1,67 +1,23 @@
 from __future__ import annotations
 
-import math
-from decimal import Decimal, InvalidOperation
 from typing import Iterable
 
-
-def _classify_value(value: object) -> tuple[str, float | None]:
-    """
-    Classify one observed value without assigning domain meaning.
-
-    Returns:
-        ("missing", None)
-        ("numeric", number)
-        ("non_numeric", None)
-
-    Only actual null/blank values are treated as missing.
-    Tokens such as "N/A", "NULL", "unknown", "-" remain
-    non-numeric observations until a higher-level rule says otherwise.
-    """
-
-    if value is None:
-        return "missing", None
-
-    if isinstance(value, str):
-        stripped = value.strip()
-
-        if stripped == "":
-            return "missing", None
-
-        try:
-            number = float(Decimal(stripped))
-        except (InvalidOperation, ValueError, OverflowError):
-            return "non_numeric", None
-
-    elif isinstance(value, bool):
-        return "non_numeric", None
-
-    elif isinstance(value, (int, float, Decimal)):
-        try:
-            number = float(value)
-        except (ValueError, OverflowError):
-            return "non_numeric", None
-
-    else:
-        return "non_numeric", None
-
-    if not math.isfinite(number):
-        return "non_numeric", None
-
-    return "numeric", number
+from rawsight.wide_temporal_series import (
+    analyze_wide_temporal_series_observation,
+)
 
 
 class WideTemporalAnalyzer:
     """
     Incremental analyzer for wide temporal value series.
 
-    This class contains analysis logic only. It does not open files,
-    decide batch sizes, inspect available memory, or choose execution
-    strategies. Those responsibilities belong to source/execution and
-    resource-assessment layers.
+    This class contains aggregate analysis logic only. It does not open
+    files, decide batch sizes, inspect available memory, or choose
+    execution strategies.
 
-    A caller supplies one series at a time. Each series is expected to
-    represent values ordered along an already detected temporal axis.
+    One-series observation is delegated to
+    analyze_wide_temporal_series_observation so the same deterministic
+    rules can later be reused by Explore without duplicating them.
     """
 
     def __init__(self) -> None:
@@ -97,129 +53,176 @@ class WideTemporalAnalyzer:
             "mixed": 0,
         }
 
-    def observe_series(self, values: Iterable[object]) -> None:
+    def observe_series(
+        self,
+        values: Iterable[object],
+    ) -> None:
         """
-        Observe one temporal series.
+        Observe one temporal series and merge its measurements into the
+        aggregate result.
 
-        Missing or non-numeric observations break adjacency. We do not
-        infer a transition across such a gap.
-
-        No observation is classified as an error here. The analyzer
-        reports structure and behaviour only.
+        The one-series result itself is intentionally not retained here,
+        keeping aggregate analysis memory independent of the number of
+        source series.
         """
+
+        observation = (
+            analyze_wide_temporal_series_observation(
+                values
+            )
+        )
 
         self.series_count += 1
 
-        series_numeric_count = 0
-        series_missing_count = 0
-        series_non_numeric_count = 0
-
-        series_positive = 0
-        series_negative = 0
-        series_unchanged = 0
-
-        previous_numeric: float | None = None
-        previous_was_numeric = False
-
-        for value in values:
-            self.temporal_value_count += 1
-
-            kind, number = _classify_value(value)
-
-            if kind == "missing":
-                self.missing_value_count += 1
-                series_missing_count += 1
-                previous_numeric = None
-                previous_was_numeric = False
-                continue
-
-            if kind == "non_numeric":
-                self.non_numeric_value_count += 1
-                series_non_numeric_count += 1
-                previous_numeric = None
-                previous_was_numeric = False
-                continue
-
-            assert number is not None
-
-            self.numeric_value_count += 1
-            series_numeric_count += 1
-
-            if number == 0:
-                self.zero_value_count += 1
-
-            if self.numeric_min is None or number < self.numeric_min:
-                self.numeric_min = number
-
-            if self.numeric_max is None or number > self.numeric_max:
-                self.numeric_max = number
-
-            if previous_was_numeric:
-                assert previous_numeric is not None
-
-                change = number - previous_numeric
-                self.adjacent_transition_count += 1
-
-                if change > 0:
-                    self.positive_transition_count += 1
-                    series_positive += 1
-
-                    if (
-                        self.largest_positive_change is None
-                        or change > self.largest_positive_change
-                    ):
-                        self.largest_positive_change = change
-
-                elif change < 0:
-                    self.negative_transition_count += 1
-                    series_negative += 1
-
-                    if (
-                        self.largest_negative_change is None
-                        or change < self.largest_negative_change
-                    ):
-                        self.largest_negative_change = change
-
-                else:
-                    self.unchanged_transition_count += 1
-                    series_unchanged += 1
-
-            previous_numeric = number
-            previous_was_numeric = True
-
-        if series_missing_count > 0:
-            self.series_with_missing_values += 1
-
-        if series_non_numeric_count > 0:
-            self.series_with_non_numeric_values += 1
-
-        if series_negative > 0:
-            self.series_with_negative_transitions += 1
-
-        transition_count = (
-            series_positive
-            + series_negative
-            + series_unchanged
+        self.temporal_value_count += (
+            observation[
+                "temporal_value_count"
+            ]
         )
 
-        if series_numeric_count == 0:
-            classification = "no_numeric_data"
-        elif transition_count == 0:
-            classification = "insufficient_adjacent_observations"
-        elif series_positive == 0 and series_negative == 0:
-            classification = "constant"
-        elif series_negative == 0:
-            classification = "non_decreasing"
-        elif series_positive == 0:
-            classification = "non_increasing"
-        else:
-            classification = "mixed"
+        self.numeric_value_count += (
+            observation[
+                "numeric_value_count"
+            ]
+        )
+        self.missing_value_count += (
+            observation[
+                "missing_value_count"
+            ]
+        )
+        self.non_numeric_value_count += (
+            observation[
+                "non_numeric_value_count"
+            ]
+        )
+        self.zero_value_count += (
+            observation[
+                "zero_value_count"
+            ]
+        )
 
-        self.series_classification[classification] += 1
+        series_min = observation[
+            "numeric_min"
+        ]
+        series_max = observation[
+            "numeric_max"
+        ]
+
+        if (
+            series_min is not None
+            and (
+                self.numeric_min is None
+                or series_min < self.numeric_min
+            )
+        ):
+            self.numeric_min = series_min
+
+        if (
+            series_max is not None
+            and (
+                self.numeric_max is None
+                or series_max > self.numeric_max
+            )
+        ):
+            self.numeric_max = series_max
+
+        self.adjacent_transition_count += (
+            observation[
+                "adjacent_transition_count"
+            ]
+        )
+        self.positive_transition_count += (
+            observation[
+                "positive_transition_count"
+            ]
+        )
+        self.negative_transition_count += (
+            observation[
+                "negative_transition_count"
+            ]
+        )
+        self.unchanged_transition_count += (
+            observation[
+                "unchanged_transition_count"
+            ]
+        )
+
+        series_largest_positive = (
+            observation[
+                "largest_positive_change"
+            ]
+        )
+        series_largest_negative = (
+            observation[
+                "largest_negative_change"
+            ]
+        )
+
+        if (
+            series_largest_positive
+            is not None
+            and (
+                self.largest_positive_change
+                is None
+                or series_largest_positive
+                > self.largest_positive_change
+            )
+        ):
+            self.largest_positive_change = (
+                series_largest_positive
+            )
+
+        if (
+            series_largest_negative
+            is not None
+            and (
+                self.largest_negative_change
+                is None
+                or series_largest_negative
+                < self.largest_negative_change
+            )
+        ):
+            self.largest_negative_change = (
+                series_largest_negative
+            )
+
+        if (
+            observation[
+                "missing_value_count"
+            ]
+            > 0
+        ):
+            self.series_with_missing_values += 1
+
+        if (
+            observation[
+                "non_numeric_value_count"
+            ]
+            > 0
+        ):
+            self.series_with_non_numeric_values += 1
+
+        if (
+            observation[
+                "negative_transition_count"
+            ]
+            > 0
+        ):
+            self.series_with_negative_transitions += 1
+
+        classification = observation[
+            "classification"
+        ]
+
+        self.series_classification[
+            classification
+        ] += 1
 
     def observe_many(
         self,
-        series: Iterable[Iterable[object]],
+        series: Iterable[
+            Iterable[object]
+        ],
     ) -> None:
         """
         Observe any iterable of temporal series.
@@ -238,34 +241,64 @@ class WideTemporalAnalyzer:
 
         return {
             "status": "measured",
-            "analysis_kind": "wide_temporal_values",
+            "analysis_kind": (
+                "wide_temporal_values"
+            ),
             "series_count": self.series_count,
-            "temporal_value_count": self.temporal_value_count,
-            "numeric_value_count": self.numeric_value_count,
-            "missing_value_count": self.missing_value_count,
-            "non_numeric_value_count": self.non_numeric_value_count,
-            "zero_value_count": self.zero_value_count,
+            "temporal_value_count": (
+                self.temporal_value_count
+            ),
+            "numeric_value_count": (
+                self.numeric_value_count
+            ),
+            "missing_value_count": (
+                self.missing_value_count
+            ),
+            "non_numeric_value_count": (
+                self.non_numeric_value_count
+            ),
+            "zero_value_count": (
+                self.zero_value_count
+            ),
             "numeric_min": self.numeric_min,
             "numeric_max": self.numeric_max,
-            "adjacent_transition_count": self.adjacent_transition_count,
-            "positive_transition_count": self.positive_transition_count,
-            "negative_transition_count": self.negative_transition_count,
-            "unchanged_transition_count": self.unchanged_transition_count,
-            "largest_positive_change": self.largest_positive_change,
-            "largest_negative_change": self.largest_negative_change,
-            "series_with_missing_values": self.series_with_missing_values,
+            "adjacent_transition_count": (
+                self.adjacent_transition_count
+            ),
+            "positive_transition_count": (
+                self.positive_transition_count
+            ),
+            "negative_transition_count": (
+                self.negative_transition_count
+            ),
+            "unchanged_transition_count": (
+                self.unchanged_transition_count
+            ),
+            "largest_positive_change": (
+                self.largest_positive_change
+            ),
+            "largest_negative_change": (
+                self.largest_negative_change
+            ),
+            "series_with_missing_values": (
+                self.series_with_missing_values
+            ),
             "series_with_non_numeric_values": (
                 self.series_with_non_numeric_values
             ),
             "series_with_negative_transitions": (
                 self.series_with_negative_transitions
             ),
-            "series_classification": dict(self.series_classification),
+            "series_classification": dict(
+                self.series_classification
+            ),
         }
 
 
 def analyze_wide_temporal_series(
-    series: Iterable[Iterable[object]],
+    series: Iterable[
+        Iterable[object]
+    ],
 ) -> dict:
     """
     Convenience wrapper for callers that already have an iterable
