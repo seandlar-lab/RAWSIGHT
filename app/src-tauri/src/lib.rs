@@ -196,6 +196,133 @@ fn profile_dataset(app: AppHandle, path: String) -> Result<String, String> {
     result.ok_or_else(|| "Profiling engine returned no result".to_string())
 }
 
+
+fn run_profile_json_command(
+    arguments: &[String],
+    failure_label: &str,
+) -> Result<String, String> {
+    let manifest_dir =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+
+    let project_root = manifest_dir
+        .parent()
+        .and_then(|path| path.parent())
+        .ok_or("Could not locate RAWSIGHT project root")?;
+
+    let python = project_root
+        .join(".venv")
+        .join("Scripts")
+        .join("python.exe");
+
+    let profile_script =
+        project_root
+            .join("engine")
+            .join("profile.py");
+
+    if !python.exists() {
+        return Err(format!(
+            "Python environment not found: {}",
+            python.display()
+        ));
+    }
+
+    if !profile_script.exists() {
+        return Err(format!(
+            "RAWSIGHT engine not found: {}",
+            profile_script.display()
+        ));
+    }
+
+    let output = Command::new(&python)
+        .arg(&profile_script)
+        .args(arguments)
+        .output()
+        .map_err(|error| {
+            format!(
+                "Could not start {failure_label}: {error}"
+            )
+        })?;
+
+    let stdout =
+        String::from_utf8_lossy(&output.stdout);
+
+    let stderr =
+        String::from_utf8_lossy(&output.stderr);
+
+    let mut result: Option<String> = None;
+    let mut engine_error: Option<String> = None;
+
+    for line in stdout.lines() {
+        if let Some(json) =
+            line.strip_prefix("RESULT\t")
+        {
+            result = Some(json.to_string());
+        } else if let Some(message) =
+            line.strip_prefix("ERROR\t")
+        {
+            engine_error = Some(
+                message.to_string()
+            );
+        }
+    }
+
+    if !output.status.success() {
+        return Err(
+            engine_error.unwrap_or_else(|| {
+                if stderr.trim().is_empty() {
+                    format!("{failure_label} failed")
+                } else {
+                    stderr.trim().to_string()
+                }
+            }),
+        );
+    }
+
+    result.ok_or_else(|| {
+        format!(
+            "{failure_label} returned no result"
+        )
+    })
+}
+
+#[tauri::command(async)]
+fn explore_wide_temporal_series_page(
+    path: String,
+    classification: Option<String>,
+    offset: u64,
+    limit: u32,
+) -> Result<String, String> {
+    let arguments = vec![
+        "wide-temporal-series-page".to_string(),
+        path,
+        classification.unwrap_or_default(),
+        offset.to_string(),
+        limit.to_string(),
+    ];
+
+    run_profile_json_command(
+        &arguments,
+        "Wide temporal series exploration",
+    )
+}
+
+#[tauri::command(async)]
+fn explore_wide_temporal_series_detail(
+    path: String,
+    series_index: u64,
+) -> Result<String, String> {
+    let arguments = vec![
+        "wide-temporal-series-detail".to_string(),
+        path,
+        series_index.to_string(),
+    ];
+
+    run_profile_json_command(
+        &arguments,
+        "Wide temporal series detail",
+    )
+}
+
 #[tauri::command(async)]
 fn raw_analysis_dataset(
     path: String,
@@ -843,6 +970,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_file_info,
             profile_dataset,
+            explore_wide_temporal_series_page,
+            explore_wide_temporal_series_detail,
 			raw_analysis_dataset,
             raw_analysis_temporal_dataset,
             inspect_rows,
