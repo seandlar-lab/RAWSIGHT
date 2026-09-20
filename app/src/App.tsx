@@ -14,6 +14,12 @@ import type {
   RawAnalysisColumnResult,
 } from "./types/rawAnalysis";
 import { RawAnalysisVisualization } from "./components/RawAnalysisVisualization";
+import { WideTemporalSeriesChart } from "./components/WideTemporalSeriesChart";
+import type {
+  WideTemporalSeriesDetail,
+  WideTemporalSeriesPage,
+  WideTemporalSeriesSummary,
+} from "./types/wideTemporalExplore";
 
 type FileInfo = {
   name: string;
@@ -170,6 +176,8 @@ type WideTemporalProfile = {
   value_analysis?: WideTemporalValueAnalysis;
   value_analysis_execution?: WideTemporalValueExecution;
 };
+
+const WIDE_TEMPORAL_SERIES_PAGE_SIZE = 10;
 
 type StructureInspectionResult = {
   file_name: string;
@@ -358,6 +366,40 @@ function formatDurationSeconds(value: number | null): string {
   return `${Number((value / 86400).toFixed(1))} d`;
 }
 
+function formatWideTemporalScalar(
+  value: string | number | boolean | null,
+): string {
+  if (value === null) {
+    return "∅";
+  }
+
+  return String(value);
+}
+
+function formatWideTemporalSeriesDescriptor(
+  series: WideTemporalSeriesSummary,
+): string {
+  const visibleDescriptors =
+    series.descriptors.filter(
+      (descriptor) =>
+        descriptor.value !== null &&
+        String(descriptor.value).trim() !== "",
+    );
+
+  if (visibleDescriptors.length === 0) {
+    return `Series ${series.series_index}`;
+  }
+
+  return visibleDescriptors
+    .map(
+      (descriptor) =>
+        `${descriptor.column_name}=${formatWideTemporalScalar(
+          descriptor.value,
+        )}`,
+    )
+    .join(" · ");
+}
+
 function App() {
   const [fileInfo, setFileInfo] = useState<FileInfo | null>(null);
   const [profile, setProfile] = useState<DatasetProfile | null>(null);
@@ -370,6 +412,19 @@ function App() {
   const [temporalValueColumn, setTemporalValueColumn] = useState("");
   const [temporalAnalysisResult, setTemporalAnalysisResult] =
     useState<NumericTemporalPairResult | null>(null);
+
+  const [
+    wideTemporalSeriesClassification,
+    setWideTemporalSeriesClassification,
+  ] = useState("");
+  const [wideTemporalSeriesPage, setWideTemporalSeriesPage] =
+    useState<WideTemporalSeriesPage | null>(null);
+  const [wideTemporalSeriesDetail, setWideTemporalSeriesDetail] =
+    useState<WideTemporalSeriesDetail | null>(null);
+  const [
+    isLoadingWideTemporalSeries,
+    setIsLoadingWideTemporalSeries,
+  ] = useState(false);
 
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [progressMessage, setProgressMessage] =
@@ -448,6 +503,12 @@ function App() {
 
     void loadAppState();
   }, []);
+
+  useEffect(() => {
+    setWideTemporalSeriesPage(null);
+    setWideTemporalSeriesDetail(null);
+    setWideTemporalSeriesClassification("");
+  }, [fileInfo?.path]);
 
   async function exitApplication() {
     await getCurrentWindow().close();
@@ -997,6 +1058,78 @@ function App() {
       setIsAnalyzing(false);
     }
   }
+  async function loadWideTemporalSeriesPage(
+    offset: number,
+  ): Promise<WideTemporalSeriesPage | null> {
+    if (!fileInfo) {
+      return null;
+    }
+
+    setIsLoadingWideTemporalSeries(true);
+    setError(null);
+
+    try {
+      const rawResult = await invoke<string>(
+        "explore_wide_temporal_series_page",
+        {
+          path: fileInfo.path,
+          classification:
+            wideTemporalSeriesClassification || null,
+          offset,
+          limit: WIDE_TEMPORAL_SERIES_PAGE_SIZE,
+        },
+      );
+
+      const parsedResult = JSON.parse(
+        rawResult,
+      ) as WideTemporalSeriesPage;
+
+      setWideTemporalSeriesPage(parsedResult);
+      setWideTemporalSeriesDetail(null);
+
+      return parsedResult;
+    } catch (err) {
+      setError(String(err));
+      return null;
+    } finally {
+      setIsLoadingWideTemporalSeries(false);
+    }
+  }
+
+  async function loadWideTemporalSeriesDetail(
+    seriesIndex: number,
+  ): Promise<WideTemporalSeriesDetail | null> {
+    if (!fileInfo) {
+      return null;
+    }
+
+    setIsLoadingWideTemporalSeries(true);
+    setError(null);
+
+    try {
+      const rawResult = await invoke<string>(
+        "explore_wide_temporal_series_detail",
+        {
+          path: fileInfo.path,
+          seriesIndex,
+        },
+      );
+
+      const parsedResult = JSON.parse(
+        rawResult,
+      ) as WideTemporalSeriesDetail;
+
+      setWideTemporalSeriesDetail(parsedResult);
+
+      return parsedResult;
+    } catch (err) {
+      setError(String(err));
+      return null;
+    } finally {
+      setIsLoadingWideTemporalSeries(false);
+    }
+  }
+
   async function runRawAnalysisColumn(
     column: string,
     role?: AnalysisColumnRole,
@@ -1600,7 +1733,7 @@ function App() {
                                         </span>
 
                                         <span>
-                                          Series with decreases{" "}
+                                          Series with negative transitions{" "}
                                           <strong>
                                             {profile.wide_temporal.value_analysis.series_with_negative_transitions.toLocaleString()}
                                           </strong>
@@ -1614,14 +1747,369 @@ function App() {
                                         </span>
                                       </>
                                     )}
-
-                                    <span>
-                                      Series-level drill-down will use this
-                                      detected structure rather than treating
-                                      the temporal columns as unrelated fields.
-                                    </span>
                                   </div>
                                 </div>
+
+                                <div className="analysis-group">
+                                  <div className="analysis-group-header">
+                                    <strong>Browse series</strong>
+                                    <span>
+                                      Page size{" "}
+                                      {WIDE_TEMPORAL_SERIES_PAGE_SIZE}
+                                    </span>
+                                  </div>
+
+                                  <div
+                                    className="analysis-group-content"
+                                    style={{ gap: "12px" }}
+                                  >
+                                    <div
+                                      style={{
+                                        display: "flex",
+                                        flexWrap: "wrap",
+                                        gap: "8px",
+                                        alignItems: "center",
+                                      }}
+                                    >
+                                      <select
+                                        value={
+                                          wideTemporalSeriesClassification
+                                        }
+                                        onChange={(event) => {
+                                          setWideTemporalSeriesClassification(
+                                            event.target.value,
+                                          );
+                                          setWideTemporalSeriesPage(null);
+                                          setWideTemporalSeriesDetail(null);
+                                        }}
+                                      >
+                                        <option value="">
+                                          All observed series
+                                        </option>
+                                        <option value="mixed">
+                                          Mixed
+                                        </option>
+                                        <option value="non_decreasing">
+                                          Non-decreasing
+                                        </option>
+                                        <option value="non_increasing">
+                                          Non-increasing
+                                        </option>
+                                        <option value="constant">
+                                          Constant
+                                        </option>
+                                        <option value="insufficient_adjacent_observations">
+                                          Insufficient adjacent observations
+                                        </option>
+                                        <option value="no_numeric_data">
+                                          No numeric data
+                                        </option>
+                                      </select>
+
+                                      <button
+                                        type="button"
+                                        disabled={
+                                          isLoadingWideTemporalSeries
+                                        }
+                                        onClick={() => {
+                                          void loadWideTemporalSeriesPage(0);
+                                        }}
+                                      >
+                                        {isLoadingWideTemporalSeries
+                                          ? "Loading..."
+                                          : "Load series"}
+                                      </button>
+                                    </div>
+
+                                    {wideTemporalSeriesPage && (
+                                      <>
+                                        <span>
+                                          Showing{" "}
+                                          <strong>
+                                            {wideTemporalSeriesPage.returned_count.toLocaleString()}
+                                          </strong>{" "}
+                                          matching series from offset{" "}
+                                          <strong>
+                                            {wideTemporalSeriesPage.offset.toLocaleString()}
+                                          </strong>
+                                        </span>
+
+                                        <span>
+                                          Source rows scanned{" "}
+                                          <strong>
+                                            {wideTemporalSeriesPage.rows_scanned.toLocaleString()}
+                                          </strong>
+                                        </span>
+
+                                        {wideTemporalSeriesPage.series.length ===
+                                        0 ? (
+                                          <span>
+                                            No series matched this observation
+                                            classification.
+                                          </span>
+                                        ) : (
+                                          <div
+                                            style={{
+                                              display: "grid",
+                                              gap: "8px",
+                                            }}
+                                          >
+                                            {wideTemporalSeriesPage.series.map(
+                                              (series) => (
+                                                <button
+                                                  key={
+                                                    series.series_index
+                                                  }
+                                                  type="button"
+                                                  disabled={
+                                                    isLoadingWideTemporalSeries
+                                                  }
+                                                  onClick={() => {
+                                                    void loadWideTemporalSeriesDetail(
+                                                      series.series_index,
+                                                    );
+                                                  }}
+                                                  style={{
+                                                    textAlign: "left",
+                                                    display: "grid",
+                                                    gap: "4px",
+                                                  }}
+                                                >
+                                                  <strong>
+                                                    Series{" "}
+                                                    {series.series_index}
+                                                  </strong>
+
+                                                  <span>
+                                                    {formatWideTemporalSeriesDescriptor(
+                                                      series,
+                                                    )}
+                                                  </span>
+
+                                                  <span>
+                                                    {
+                                                      series.classification
+                                                    }
+                                                    {" · "}
+                                                    negative transitions{" "}
+                                                    {
+                                                      series.negative_transition_count
+                                                    }
+                                                    {" · "}
+                                                    largest negative change{" "}
+                                                    {series.largest_negative_change ??
+                                                      "—"}
+                                                  </span>
+                                                </button>
+                                              ),
+                                            )}
+                                          </div>
+                                        )}
+
+                                        <div
+                                          style={{
+                                            display: "flex",
+                                            gap: "8px",
+                                          }}
+                                        >
+                                          <button
+                                            type="button"
+                                            disabled={
+                                              isLoadingWideTemporalSeries ||
+                                              wideTemporalSeriesPage.offset ===
+                                                0
+                                            }
+                                            onClick={() => {
+                                              void loadWideTemporalSeriesPage(
+                                                Math.max(
+                                                  0,
+                                                  wideTemporalSeriesPage.offset -
+                                                    wideTemporalSeriesPage.limit,
+                                                ),
+                                              );
+                                            }}
+                                          >
+                                            Previous
+                                          </button>
+
+                                          <button
+                                            type="button"
+                                            disabled={
+                                              isLoadingWideTemporalSeries ||
+                                              !wideTemporalSeriesPage.has_more ||
+                                              wideTemporalSeriesPage.next_offset ===
+                                                null
+                                            }
+                                            onClick={() => {
+                                              if (
+                                                wideTemporalSeriesPage.next_offset !==
+                                                null
+                                              ) {
+                                                void loadWideTemporalSeriesPage(
+                                                  wideTemporalSeriesPage.next_offset,
+                                                );
+                                              }
+                                            }}
+                                          >
+                                            Next
+                                          </button>
+                                        </div>
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {wideTemporalSeriesDetail && (
+                                  <div className="analysis-group">
+                                    <div className="analysis-group-header">
+                                      <strong>
+                                        Series{" "}
+                                        {
+                                          wideTemporalSeriesDetail.series_index
+                                        }
+                                      </strong>
+                                      <span>
+                                        {
+                                          wideTemporalSeriesDetail.classification
+                                        }
+                                      </span>
+                                    </div>
+
+                                    <div
+                                      className="analysis-group-content"
+                                      style={{ gap: "12px" }}
+                                    >
+                                      <span>
+                                        Descriptor fields
+                                      </span>
+
+                                      <div
+                                        style={{
+                                          display: "grid",
+                                          gap: "4px",
+                                        }}
+                                      >
+                                        {wideTemporalSeriesDetail.descriptors.map(
+                                          (descriptor) => (
+                                            <span
+                                              key={
+                                                descriptor.column_index
+                                              }
+                                            >
+                                              <strong>
+                                                {
+                                                  descriptor.column_name
+                                                }
+                                              </strong>
+                                              {" = "}
+                                              {formatWideTemporalScalar(
+                                                descriptor.value,
+                                              )}
+                                            </span>
+                                          ),
+                                        )}
+                                      </div>
+
+                                      <span>
+                                        Time points{" "}
+                                        <strong>
+                                          {wideTemporalSeriesDetail.temporal_points.length.toLocaleString()}
+                                        </strong>
+                                      </span>
+
+                                      {wideTemporalSeriesDetail.temporal_points
+                                        .length > 0 && (
+                                        <span>
+                                          Observed range{" "}
+                                          <strong>
+                                            {
+                                              wideTemporalSeriesDetail
+                                                .temporal_points[0].label
+                                            }
+                                          </strong>
+                                          {" → "}
+                                          <strong>
+                                            {
+                                              wideTemporalSeriesDetail
+                                                .temporal_points[
+                                                wideTemporalSeriesDetail
+                                                  .temporal_points.length - 1
+                                              ].label
+                                            }
+                                          </strong>
+                                        </span>
+                                      )}
+
+                                      <WideTemporalSeriesChart
+                                        detail={
+                                          wideTemporalSeriesDetail
+                                        }
+                                      />
+
+                                      <span>
+                                        Negative transitions{" "}
+                                        <strong>
+                                          {wideTemporalSeriesDetail.negative_transition_count.toLocaleString()}
+                                        </strong>
+                                      </span>
+
+                                      <span>
+                                        Largest negative change{" "}
+                                        <strong>
+                                          {wideTemporalSeriesDetail.largest_negative_change ??
+                                            "—"}
+                                        </strong>
+                                      </span>
+
+                                      {wideTemporalSeriesDetail
+                                        .negative_transitions.length === 0 ? (
+                                        <span>
+                                          No negative adjacent transitions
+                                          observed.
+                                        </span>
+                                      ) : (
+                                        <div
+                                          style={{
+                                            display: "grid",
+                                            gap: "8px",
+                                          }}
+                                        >
+                                          {wideTemporalSeriesDetail.negative_transitions.map(
+                                            (transition) => (
+                                              <div
+                                                key={`${transition.from_index}-${transition.to_index}`}
+                                                style={{
+                                                  display: "grid",
+                                                  gap: "2px",
+                                                }}
+                                              >
+                                                <strong>
+                                                  {
+                                                    transition.from_label
+                                                  }
+                                                  {" → "}
+                                                  {transition.to_label}
+                                                </strong>
+
+                                                <span>
+                                                  {
+                                                    transition.previous_value
+                                                  }
+                                                  {" → "}
+                                                  {
+                                                    transition.current_value
+                                                  }
+                                                  {" · change "}
+                                                  {transition.change}
+                                                </span>
+                                              </div>
+                                            ),
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
                               </>
                             )}
 
