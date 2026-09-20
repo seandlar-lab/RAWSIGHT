@@ -15,6 +15,9 @@ from rawsight.source_context import (
 from rawsight.wide_temporal import (
     WideTemporalAnalyzer,
 )
+from rawsight.wide_temporal_series import (
+    analyze_wide_temporal_series_observation,
+)
 
 
 ProgressCallback = Callable[[str], None]
@@ -330,3 +333,453 @@ def execute_wide_temporal_analysis_measured(
             measurement
         ),
     }
+
+def _json_safe_value(
+    value: object,
+) -> object:
+    """
+    Keep JSON-native scalar values unchanged and stringify other source
+    values such as dates/decimals. This preserves source information
+    without assigning additional semantics.
+    """
+
+    if value is None:
+        return None
+
+    if isinstance(
+        value,
+        (str, int, float, bool),
+    ):
+        return value
+
+    return str(value)
+
+
+def build_wide_temporal_series_result(
+    column_names: list[str],
+    row: tuple | list,
+    temporal_axis: dict[str, Any],
+    series_index: int,
+    include_points: bool = False,
+) -> dict[str, Any]:
+    """
+    Build one structure-aware series result from one source row.
+
+    Every column outside the detected horizontal temporal axis is treated
+    as a descriptor candidate. No descriptor names or domain-specific
+    fields are hard-coded.
+    """
+
+    start_index, end_index = (
+        _validate_temporal_axis(
+            temporal_axis
+        )
+    )
+
+    _validate_axis_against_columns(
+        column_names,
+        start_index,
+        end_index,
+    )
+
+    if len(row) != len(column_names):
+        raise ValueError(
+            "Source row width does not match "
+            "the detected dataset width"
+        )
+
+    descriptor_indexes = [
+        index
+        for index in range(
+            len(column_names)
+        )
+        if not (
+            start_index
+            <= index
+            <= end_index
+        )
+    ]
+
+    temporal_values = row[
+        start_index:
+        end_index + 1
+    ]
+
+    observation = (
+        analyze_wide_temporal_series_observation(
+            temporal_values
+        )
+    )
+
+    result: dict[str, Any] = {
+        "series_index": series_index,
+        "descriptors": [
+            {
+                "column_index": index,
+                "column_name": (
+                    column_names[index]
+                ),
+                "value": _json_safe_value(
+                    row[index]
+                ),
+            }
+            for index in descriptor_indexes
+        ],
+        "classification": observation[
+            "classification"
+        ],
+        "temporal_value_count": observation[
+            "temporal_value_count"
+        ],
+        "numeric_value_count": observation[
+            "numeric_value_count"
+        ],
+        "missing_value_count": observation[
+            "missing_value_count"
+        ],
+        "non_numeric_value_count": observation[
+            "non_numeric_value_count"
+        ],
+        "positive_transition_count": observation[
+            "positive_transition_count"
+        ],
+        "negative_transition_count": observation[
+            "negative_transition_count"
+        ],
+        "unchanged_transition_count": observation[
+            "unchanged_transition_count"
+        ],
+        "largest_positive_change": observation[
+            "largest_positive_change"
+        ],
+        "largest_negative_change": observation[
+            "largest_negative_change"
+        ],
+    }
+
+    if include_points:
+        result["temporal_points"] = [
+            {
+                "axis_index": axis_index,
+                "column_index": (
+                    start_index
+                    + axis_index
+                ),
+                "label": column_names[
+                    start_index
+                    + axis_index
+                ],
+                "value": _json_safe_value(
+                    value
+                ),
+            }
+            for axis_index, value
+            in enumerate(
+                temporal_values
+            )
+        ]
+
+        result[
+            "negative_transitions"
+        ] = [
+            {
+                **transition,
+                "from_column_index": (
+                    start_index
+                    + transition[
+                        "from_index"
+                    ]
+                ),
+                "to_column_index": (
+                    start_index
+                    + transition[
+                        "to_index"
+                    ]
+                ),
+                "from_label": column_names[
+                    start_index
+                    + transition[
+                        "from_index"
+                    ]
+                ],
+                "to_label": column_names[
+                    start_index
+                    + transition[
+                        "to_index"
+                    ]
+                ],
+            }
+            for transition in observation[
+                "negative_transitions"
+            ]
+        ]
+
+    return result
+
+
+def _execute_wide_temporal_series_page_with_context(
+    source_context: SourceExecutionContext,
+    temporal_axis: dict[str, Any],
+    classification: str | None,
+    offset: int,
+    limit: int,
+) -> dict[str, Any]:
+    """
+    Return one caller-sized page of matching series.
+
+    The function streams source rows and retains at most `limit` results.
+    Page size is supplied by the caller; there is no hidden dataset-size
+    acceptance threshold.
+    """
+
+    if offset < 0:
+        raise ValueError(
+            "offset must be >= 0"
+        )
+
+    if limit < 1:
+        raise ValueError(
+            "limit must be >= 1"
+        )
+
+    start_index, end_index = (
+        _validate_temporal_axis(
+            temporal_axis
+        )
+    )
+
+    column_names = (
+        source_context.column_names
+    )
+
+    _validate_axis_against_columns(
+        column_names,
+        start_index,
+        end_index,
+    )
+
+    cursor = (
+        source_context.select_all_cursor()
+    )
+
+    results: list[dict[str, Any]] = []
+    matching_seen = 0
+    rows_scanned = 0
+    has_more = False
+
+    while True:
+        row = cursor.fetchone()
+
+        if row is None:
+            break
+
+        series_index = rows_scanned
+        rows_scanned += 1
+
+        series_result = (
+            build_wide_temporal_series_result(
+                column_names=column_names,
+                row=row,
+                temporal_axis=temporal_axis,
+                series_index=series_index,
+                include_points=False,
+            )
+        )
+
+        if (
+            classification is not None
+            and series_result[
+                "classification"
+            ]
+            != classification
+        ):
+            continue
+
+        if matching_seen < offset:
+            matching_seen += 1
+            continue
+
+        if len(results) < limit:
+            results.append(
+                series_result
+            )
+            matching_seen += 1
+            continue
+
+        has_more = True
+        break
+
+    return {
+        "status": "measured",
+        "execution_mode": "streaming",
+        "classification_filter": (
+            classification
+        ),
+        "offset": offset,
+        "limit": limit,
+        "returned_count": len(
+            results
+        ),
+        "next_offset": (
+            offset + len(results)
+            if has_more
+            else None
+        ),
+        "has_more": has_more,
+        "rows_scanned": rows_scanned,
+        "series": results,
+    }
+
+
+def execute_wide_temporal_series_page(
+    file_path: str,
+    temporal_axis: dict[str, Any],
+    classification: str | None,
+    offset: int,
+    limit: int,
+    source_context: (
+        SourceExecutionContext | None
+    ) = None,
+) -> dict[str, Any]:
+    """
+    Explore wide-temporal series as a paged streaming result.
+
+    Filtering uses observation classifications only. No business meaning
+    is assigned to any classification.
+    """
+
+    if source_context is not None:
+        source_context.assert_source(
+            file_path
+        )
+
+        if not source_context.is_open:
+            raise RuntimeError(
+                "Supplied SourceExecutionContext "
+                "must already be open"
+            )
+
+        return (
+            _execute_wide_temporal_series_page_with_context(
+                source_context=source_context,
+                temporal_axis=temporal_axis,
+                classification=classification,
+                offset=offset,
+                limit=limit,
+            )
+        )
+
+    with SourceExecutionContext(
+        file_path
+    ) as owned_context:
+        return (
+            _execute_wide_temporal_series_page_with_context(
+                source_context=owned_context,
+                temporal_axis=temporal_axis,
+                classification=classification,
+                offset=offset,
+                limit=limit,
+            )
+        )
+
+
+def _execute_wide_temporal_series_detail_with_context(
+    source_context: SourceExecutionContext,
+    temporal_axis: dict[str, Any],
+    series_index: int,
+) -> dict[str, Any]:
+    if series_index < 0:
+        raise ValueError(
+            "series_index must be >= 0"
+        )
+
+    start_index, end_index = (
+        _validate_temporal_axis(
+            temporal_axis
+        )
+    )
+
+    column_names = (
+        source_context.column_names
+    )
+
+    _validate_axis_against_columns(
+        column_names,
+        start_index,
+        end_index,
+    )
+
+    cursor = (
+        source_context.select_all_cursor()
+    )
+
+    current_index = 0
+
+    while True:
+        row = cursor.fetchone()
+
+        if row is None:
+            raise IndexError(
+                "series_index exceeds "
+                "available source rows"
+            )
+
+        if current_index == series_index:
+            return (
+                build_wide_temporal_series_result(
+                    column_names=column_names,
+                    row=row,
+                    temporal_axis=temporal_axis,
+                    series_index=series_index,
+                    include_points=True,
+                )
+            )
+
+        current_index += 1
+
+
+def execute_wide_temporal_series_detail(
+    file_path: str,
+    temporal_axis: dict[str, Any],
+    series_index: int,
+    source_context: (
+        SourceExecutionContext | None
+    ) = None,
+) -> dict[str, Any]:
+    """
+    Return one complete series for drill-down.
+
+    The source is streamed until the requested source-row ordinal is
+    reached. Only that series is materialized as temporal points.
+    """
+
+    if source_context is not None:
+        source_context.assert_source(
+            file_path
+        )
+
+        if not source_context.is_open:
+            raise RuntimeError(
+                "Supplied SourceExecutionContext "
+                "must already be open"
+            )
+
+        return (
+            _execute_wide_temporal_series_detail_with_context(
+                source_context=source_context,
+                temporal_axis=temporal_axis,
+                series_index=series_index,
+            )
+        )
+
+    with SourceExecutionContext(
+        file_path
+    ) as owned_context:
+        return (
+            _execute_wide_temporal_series_detail_with_context(
+                source_context=owned_context,
+                temporal_axis=temporal_axis,
+                series_index=series_index,
+            )
+        )
+
