@@ -8,6 +8,9 @@ from rawsight.datasets import (
     open_dataset,
     select_analysis_strategy,
 )
+from rawsight.source_context import (
+    SourceExecutionContext,
+)
 from rawsight.wide_temporal_execution import (
     execute_wide_temporal_analysis,
 )
@@ -134,35 +137,60 @@ def profile_conservative_dataset(
     file_path: str,
     inspection: dict,
     analysis_strategy: dict,
+    source_context: (
+        SourceExecutionContext | None
+    ) = None,
+    count_rows: bool = True,
 ) -> dict:
     """
     Produce a safe structural profile without running
     whole-row DISTINCT or mass column aggregates.
+
+    A supplied SourceExecutionContext is reused and remains owned by
+    the caller. Without one, this function owns one source session.
     """
 
     path = Path(file_path)
 
-    progress("Opening dataset safely")
-
-    connection = duckdb.connect()
-
-    try:
-        relation = open_dataset(
-            connection,
-            file_path,
+    if source_context is None:
+        progress(
+            "Opening dataset safely"
         )
 
-        column_names = relation.columns
-        column_types = [
-            str(data_type)
-            for data_type in relation.types
-        ]
+        with SourceExecutionContext(
+            file_path
+        ) as owned_context:
+            return profile_conservative_dataset(
+                file_path=file_path,
+                inspection=inspection,
+                analysis_strategy=analysis_strategy,
+                source_context=owned_context,
+                count_rows=count_rows,
+            )
 
-        relation.create_view(
-            "rawsight_source",
-            replace=True,
+    source_context.assert_source(
+        file_path
+    )
+
+    if not source_context.is_open:
+        raise RuntimeError(
+            "Supplied SourceExecutionContext "
+            "must already be open"
         )
 
+    connection = (
+        source_context.require_connection()
+    )
+    column_names = (
+        source_context.column_names
+    )
+    column_types = (
+        source_context.column_types
+    )
+
+    row_count = None
+
+    if count_rows:
         progress("Counting rows")
 
         row_count = connection.execute(
@@ -172,53 +200,52 @@ def profile_conservative_dataset(
             """
         ).fetchone()[0]
 
-        columns = [
-            {
-                "name": name,
-                "type": data_type,
-                "null_count": None,
-                "null_percent": None,
-                "distinct_count": None,
-                "unique_percent": None,
-                "min": None,
-                "max": None,
-                "semantic_hint": None,
-            }
-            for name, data_type in zip(
-                column_names,
-                column_types,
-            )
-        ]
-
-        return {
-            "file": path.name,
-            "rows": row_count,
-            "column_count": len(columns),
-
-            "duplicate_rows": None,
-            "duplicate_percent": None,
-            "missing_values": None,
-            "missing_percent": None,
-
-            "columns": columns,
-
-            "analysis_strategy": analysis_strategy,
-            "structural_model": inspection.get(
-                "structural_model"
-            ),
+    columns = [
+        {
+            "name": name,
+            "type": data_type,
+            "null_count": None,
+            "null_percent": None,
+            "distinct_count": None,
+            "unique_percent": None,
+            "min": None,
+            "max": None,
+            "semantic_hint": None,
         }
+        for name, data_type in zip(
+            column_names,
+            column_types,
+        )
+    ]
 
-    finally:
-        connection.close()
+    return {
+        "file": path.name,
+        "rows": row_count,
+        "column_count": len(columns),
+
+        "duplicate_rows": None,
+        "duplicate_percent": None,
+        "missing_values": None,
+        "missing_percent": None,
+
+        "columns": columns,
+
+        "analysis_strategy": analysis_strategy,
+        "structural_model": inspection.get(
+            "structural_model"
+        ),
+    }
 
 def profile_dataset(file_path: str) -> dict:
     """
     Route dataset analysis according to detected structural
     characteristics.
 
-    Unsafe generic profiling is bypassed when structural
-    evidence indicates that a specialized or conservative
-    strategy is required.
+    Unsafe generic profiling is bypassed when structural evidence
+    indicates that a specialized or conservative strategy is required.
+
+    The routed DuckDB analysis phase shares one SourceExecutionContext.
+    Source inspection remains a separate detection phase.
     """
 
     path = Path(file_path)
@@ -228,7 +255,9 @@ def profile_dataset(file_path: str) -> dict:
             f"File not found: {path}"
         )
 
-    progress("Inspecting source structure")
+    progress(
+        "Inspecting source structure"
+    )
 
     inspection = inspect_source(
         file_path
@@ -239,8 +268,10 @@ def profile_dataset(file_path: str) -> dict:
         {},
     )
 
-    analysis_strategy = select_analysis_strategy(
-        structural_model
+    analysis_strategy = (
+        select_analysis_strategy(
+            structural_model
+        )
     )
 
     strategy = analysis_strategy[
@@ -251,50 +282,91 @@ def profile_dataset(file_path: str) -> dict:
         f"Analysis strategy: {strategy}"
     )
 
-    if strategy == "wide_temporal":
-        return profile_wide_temporal_safe(
-            file_path=file_path,
-            inspection=inspection,
-            analysis_strategy=analysis_strategy,
-        )
-
-    if strategy == "long_temporal":
-        return profile_conservative_dataset(
-            file_path=file_path,
-            inspection=inspection,
-            analysis_strategy=analysis_strategy,
-        )
-
-    if strategy == "conservative_tabular":
-        return profile_conservative_dataset(
-            file_path=file_path,
-            inspection=inspection,
-            analysis_strategy=analysis_strategy,
-        )
-
-    return profile_conservative_dataset(
-        file_path=file_path,
-        inspection=inspection,
-        analysis_strategy=analysis_strategy,
+    progress(
+        "Opening dataset safely"
     )
+
+    with SourceExecutionContext(
+        file_path
+    ) as source_context:
+        if strategy == "wide_temporal":
+            return profile_wide_temporal_safe(
+                file_path=file_path,
+                inspection=inspection,
+                analysis_strategy=analysis_strategy,
+                source_context=source_context,
+            )
+
+        if strategy == "long_temporal":
+            return profile_conservative_dataset(
+                file_path=file_path,
+                inspection=inspection,
+                analysis_strategy=analysis_strategy,
+                source_context=source_context,
+            )
+
+        if strategy == "conservative_tabular":
+            return profile_conservative_dataset(
+                file_path=file_path,
+                inspection=inspection,
+                analysis_strategy=analysis_strategy,
+                source_context=source_context,
+            )
+
+        return profile_conservative_dataset(
+            file_path=file_path,
+            inspection=inspection,
+            analysis_strategy=analysis_strategy,
+            source_context=source_context,
+        )
 
 def profile_wide_temporal_safe(
     file_path: str,
     inspection: dict,
     analysis_strategy: dict,
+    source_context: (
+        SourceExecutionContext | None
+    ) = None,
 ) -> dict:
     """
     Produce a safe profile for a wide temporal dataset.
 
-    Temporal facts are derived from structural evidence already
-    detected during source inspection. Expensive generic
-    profiling remains bypassed.
+    Structural profiling and wide-temporal value analysis share one
+    source context. If called directly without a context, this function
+    creates one context for both steps and closes it afterwards.
     """
+
+    if source_context is None:
+        progress(
+            "Opening dataset safely"
+        )
+
+        with SourceExecutionContext(
+            file_path
+        ) as owned_context:
+            return profile_wide_temporal_safe(
+                file_path=file_path,
+                inspection=inspection,
+                analysis_strategy=analysis_strategy,
+                source_context=owned_context,
+            )
+
+    source_context.assert_source(
+        file_path
+    )
+
+    if not source_context.is_open:
+        raise RuntimeError(
+            "Supplied SourceExecutionContext "
+            "must already be open"
+        )
 
     profile = profile_conservative_dataset(
         file_path=file_path,
         inspection=inspection,
         analysis_strategy=analysis_strategy,
+        source_context=source_context,
+        count_rows=False,
     )
 
     structural_model = inspection.get(
@@ -330,7 +402,9 @@ def profile_wide_temporal_safe(
         and end_index >= start_index
     ):
         temporal_column_count = (
-            end_index - start_index + 1
+            end_index
+            - start_index
+            + 1
         )
 
     non_temporal_column_count = None
@@ -346,9 +420,15 @@ def profile_wide_temporal_safe(
         "axis_orientation": temporal_axis.get(
             "orientation"
         ),
-        "temporal_column_start_index": start_index,
-        "temporal_column_end_index": end_index,
-        "temporal_column_count": temporal_column_count,
+        "temporal_column_start_index": (
+            start_index
+        ),
+        "temporal_column_end_index": (
+            end_index
+        ),
+        "temporal_column_count": (
+            temporal_column_count
+        ),
         "non_temporal_column_count": (
             non_temporal_column_count
         ),
@@ -381,16 +461,25 @@ def profile_wide_temporal_safe(
         ),
     }
 
-    value_execution = execute_wide_temporal_analysis(
-        file_path=file_path,
-        temporal_axis=temporal_axis,
-        progress=progress,
+    value_execution = (
+        execute_wide_temporal_analysis(
+            file_path=file_path,
+            temporal_axis=temporal_axis,
+            progress=progress,
+            source_context=source_context,
+        )
     )
 
-    profile["wide_temporal"]["value_analysis"] = (
+    profile["rows"] = (
         value_execution.get(
-            "analysis"
+            "rows_processed"
         )
+    )
+
+    profile["wide_temporal"][
+        "value_analysis"
+    ] = value_execution.get(
+        "analysis"
     )
 
     profile["wide_temporal"][
@@ -399,11 +488,15 @@ def profile_wide_temporal_safe(
         "status": value_execution.get(
             "status"
         ),
-        "execution_mode": value_execution.get(
-            "execution_mode"
+        "execution_mode": (
+            value_execution.get(
+                "execution_mode"
+            )
         ),
-        "rows_processed": value_execution.get(
-            "rows_processed"
+        "rows_processed": (
+            value_execution.get(
+                "rows_processed"
+            )
         ),
     }
 
