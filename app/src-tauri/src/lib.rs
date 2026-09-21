@@ -288,13 +288,15 @@ fn run_profile_json_command(
 #[tauri::command(async)]
 fn explore_wide_temporal_series_page(
     path: String,
+    temporal_axis_json: String,
     classification: Option<String>,
     offset: u64,
     limit: u32,
 ) -> Result<String, String> {
     let arguments = vec![
-        "wide-temporal-series-page".to_string(),
+        "wide-temporal-series-page-context".to_string(),
         path,
+        temporal_axis_json,
         classification.unwrap_or_default(),
         offset.to_string(),
         limit.to_string(),
@@ -309,11 +311,13 @@ fn explore_wide_temporal_series_page(
 #[tauri::command(async)]
 fn explore_wide_temporal_series_detail(
     path: String,
+    temporal_axis_json: String,
     series_index: u64,
 ) -> Result<String, String> {
     let arguments = vec![
-        "wide-temporal-series-detail".to_string(),
+        "wide-temporal-series-detail-context".to_string(),
         path,
+        temporal_axis_json,
         series_index.to_string(),
     ];
 

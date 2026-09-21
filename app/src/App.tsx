@@ -400,6 +400,30 @@ function formatWideTemporalSeriesDescriptor(
     .join(" · ");
 }
 
+function buildWideTemporalAxisContext(
+  profile: DatasetProfile | null,
+): string | null {
+  const wideTemporal =
+    profile?.wide_temporal;
+
+  if (
+    !wideTemporal ||
+    wideTemporal.axis_orientation !== "horizontal" ||
+    wideTemporal.temporal_column_start_index === null ||
+    wideTemporal.temporal_column_end_index === null
+  ) {
+    return null;
+  }
+
+  return JSON.stringify({
+    orientation: "horizontal",
+    start_index:
+      wideTemporal.temporal_column_start_index,
+    end_index:
+      wideTemporal.temporal_column_end_index,
+  });
+}
+
 function App() {
   const [fileInfo, setFileInfo] = useState<FileInfo | null>(null);
   const [profile, setProfile] = useState<DatasetProfile | null>(null);
@@ -1070,6 +1094,16 @@ function App() {
       return null;
     }
 
+    const temporalAxisJson =
+      buildWideTemporalAxisContext(profile);
+
+    if (!temporalAxisJson) {
+      setError(
+        "Series Explorer requires the horizontal temporal axis established by Light Analysis.",
+      );
+      return null;
+    }
+
     setIsLoadingWideTemporalSeries(true);
     setWideTemporalSeriesLoadingIndex(null);
     setError(null);
@@ -1079,6 +1113,7 @@ function App() {
         "explore_wide_temporal_series_page",
         {
           path: fileInfo.path,
+          temporalAxisJson,
           classification:
             wideTemporalSeriesClassification || null,
           offset,
@@ -1109,6 +1144,16 @@ function App() {
       return null;
     }
 
+    const temporalAxisJson =
+      buildWideTemporalAxisContext(profile);
+
+    if (!temporalAxisJson) {
+      setError(
+        "Series Explorer requires the horizontal temporal axis established by Light Analysis.",
+      );
+      return null;
+    }
+
     if (
       wideTemporalSeriesDetail?.series_index ===
       seriesIndex
@@ -1130,6 +1175,7 @@ function App() {
         "explore_wide_temporal_series_detail",
         {
           path: fileInfo.path,
+          temporalAxisJson,
           seriesIndex,
         },
       );

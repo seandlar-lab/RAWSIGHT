@@ -82,6 +82,81 @@ def _wide_temporal_axis(
     return temporal_axis
 
 
+def _validated_temporal_axis_from_json(
+    temporal_axis_json: str,
+) -> dict:
+    """
+    Validate a temporal axis already established by Light Analysis.
+
+    This path deliberately does not run source detection again.
+    The caller supplies normalized structural context produced by
+    the existing Detect -> Normalize -> Analyze flow.
+    """
+
+    try:
+        temporal_axis = json.loads(
+            temporal_axis_json
+        )
+    except json.JSONDecodeError as error:
+        raise ValueError(
+            "Temporal axis context is not valid JSON"
+        ) from error
+
+    if not isinstance(
+        temporal_axis,
+        dict,
+    ):
+        raise ValueError(
+            "Temporal axis context must be an object"
+        )
+
+    if temporal_axis.get(
+        "orientation"
+    ) != "horizontal":
+        raise ValueError(
+            "Series Explorer requires a "
+            "horizontal temporal axis"
+        )
+
+    start_index = temporal_axis.get(
+        "start_index"
+    )
+    end_index = temporal_axis.get(
+        "end_index"
+    )
+
+    if not isinstance(
+        start_index,
+        int,
+    ):
+        raise ValueError(
+            "Temporal axis start_index is missing or invalid"
+        )
+
+    if not isinstance(
+        end_index,
+        int,
+    ):
+        raise ValueError(
+            "Temporal axis end_index is missing or invalid"
+        )
+
+    if (
+        start_index < 0
+        or end_index < start_index
+    ):
+        raise ValueError(
+            "Temporal axis range is invalid"
+        )
+
+    return {
+        **temporal_axis,
+        "orientation": "horizontal",
+        "start_index": start_index,
+        "end_index": end_index,
+    }
+
+
 def _run_profile(
     file_path: str,
 ) -> dict:
@@ -160,6 +235,66 @@ def _run_wide_temporal_series_detail(
     )
 
 
+def _run_wide_temporal_series_page_context(
+    arguments: list[str],
+) -> dict:
+    if len(arguments) != 6:
+        raise ValueError(
+            "wide-temporal-series-page-context requires: "
+            "<path> <temporal_axis_json> "
+            "<classification> <offset> <limit>"
+        )
+
+    file_path = arguments[1]
+    temporal_axis = (
+        _validated_temporal_axis_from_json(
+            arguments[2]
+        )
+    )
+    classification = (
+        arguments[3].strip()
+        or None
+    )
+    offset = int(arguments[4])
+    limit = int(arguments[5])
+
+    return (
+        execute_wide_temporal_series_page(
+            file_path=file_path,
+            temporal_axis=temporal_axis,
+            classification=classification,
+            offset=offset,
+            limit=limit,
+        )
+    )
+
+
+def _run_wide_temporal_series_detail_context(
+    arguments: list[str],
+) -> dict:
+    if len(arguments) != 4:
+        raise ValueError(
+            "wide-temporal-series-detail-context requires: "
+            "<path> <temporal_axis_json> <series_index>"
+        )
+
+    file_path = arguments[1]
+    temporal_axis = (
+        _validated_temporal_axis_from_json(
+            arguments[2]
+        )
+    )
+    series_index = int(arguments[3])
+
+    return (
+        execute_wide_temporal_series_detail(
+            file_path=file_path,
+            temporal_axis=temporal_axis,
+            series_index=series_index,
+        )
+    )
+
+
 def main(arguments: list[str]) -> int:
     """
     Backward-compatible engine entrypoint.
@@ -191,6 +326,18 @@ def main(arguments: list[str]) -> int:
     elif command == "wide-temporal-series-detail":
         result = (
             _run_wide_temporal_series_detail(
+                arguments
+            )
+        )
+    elif command == "wide-temporal-series-page-context":
+        result = (
+            _run_wide_temporal_series_page_context(
+                arguments
+            )
+        )
+    elif command == "wide-temporal-series-detail-context":
+        result = (
+            _run_wide_temporal_series_detail_context(
                 arguments
             )
         )
