@@ -1,3 +1,8 @@
+import {
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
+
 import type {
   TimeSeriesChartProps,
   TimeSeriesMarker,
@@ -16,6 +21,74 @@ function numericValues(
     );
 }
 
+function nearestNumericPosition(
+  points: TimeSeriesPoint[],
+  requestedPosition: number,
+): number | null {
+  if (points.length === 0) {
+    return null;
+  }
+
+  const boundedPosition = Math.max(
+    0,
+    Math.min(
+      points.length - 1,
+      requestedPosition,
+    ),
+  );
+
+  const directPoint =
+    points[boundedPosition];
+
+  if (
+    directPoint.value !== null &&
+    Number.isFinite(
+      directPoint.value,
+    )
+  ) {
+    return boundedPosition;
+  }
+
+  for (
+    let distance = 1;
+    distance < points.length;
+    distance += 1
+  ) {
+    const left =
+      boundedPosition - distance;
+    const right =
+      boundedPosition + distance;
+
+    if (left >= 0) {
+      const point = points[left];
+
+      if (
+        point.value !== null &&
+        Number.isFinite(
+          point.value,
+        )
+      ) {
+        return left;
+      }
+    }
+
+    if (right < points.length) {
+      const point = points[right];
+
+      if (
+        point.value !== null &&
+        Number.isFinite(
+          point.value,
+        )
+      ) {
+        return right;
+      }
+    }
+  }
+
+  return null;
+}
+
 export function TimeSeriesChart({
   points,
   markers = [],
@@ -23,14 +96,14 @@ export function TimeSeriesChart({
   ariaLabel = "Time series chart",
   markerLegend,
 }: TimeSeriesChartProps) {
-  const width = 900;
-  const height = 300;
+  const width = 720;
+  const height = 340;
 
   const padding = {
-    left: 64,
+    left: 84,
     right: 24,
-    top: 24,
-    bottom: 44,
+    top: 28,
+    bottom: 52,
   };
 
   const plotWidth =
@@ -40,6 +113,11 @@ export function TimeSeriesChart({
 
   const values = numericValues(points);
 
+  const [
+    hoverPosition,
+    setHoverPosition,
+  ] = useState<number | null>(null);
+
   if (values.length === 0) {
     return (
       <div
@@ -47,7 +125,7 @@ export function TimeSeriesChart({
           padding: "16px",
           border: "1px solid currentColor",
           borderRadius: "8px",
-          opacity: 0.7,
+          opacity: 0.75,
         }}
       >
         No numeric values available to plot.
@@ -146,6 +224,7 @@ export function TimeSeriesChart({
 
       return {
         ...marker,
+        position,
         x: xForPosition(position),
         y: yForValue(marker.value),
       };
@@ -154,6 +233,7 @@ export function TimeSeriesChart({
       (
         marker,
       ): marker is TimeSeriesMarker & {
+        position: number;
         x: number;
         y: number;
       } => marker !== null,
@@ -166,6 +246,84 @@ export function TimeSeriesChart({
     points[
       points.length - 1
     ]?.label ?? "";
+
+  const yTicks = Array.from(
+    { length: 5 },
+    (_, index) => {
+      const ratio = index / 4;
+      const value =
+        scaleMax -
+        valueRange * ratio;
+
+      return {
+        value,
+        y:
+          padding.top +
+          plotHeight * ratio,
+      };
+    },
+  );
+
+  const hoveredPoint =
+    hoverPosition === null
+      ? null
+      : points[hoverPosition] ?? null;
+
+  const hoveredX =
+    hoverPosition === null
+      ? null
+      : xForPosition(hoverPosition);
+
+  const hoveredY =
+    hoveredPoint?.value === null ||
+    hoveredPoint?.value === undefined
+      ? null
+      : yForValue(
+          hoveredPoint.value,
+        );
+
+  function handlePointerMove(
+    event: ReactPointerEvent<SVGSVGElement>,
+  ) {
+    const bounds =
+      event.currentTarget.getBoundingClientRect();
+
+    if (
+      bounds.width <= 0 ||
+      pointCount === 0
+    ) {
+      return;
+    }
+
+    const viewBoxX =
+      ((event.clientX - bounds.left) /
+        bounds.width) *
+      width;
+
+    const clampedX = Math.max(
+      padding.left,
+      Math.min(
+        width - padding.right,
+        viewBoxX,
+      ),
+    );
+
+    const requestedPosition =
+      pointCount <= 1
+        ? 0
+        : Math.round(
+            ((clampedX - padding.left) /
+              plotWidth) *
+              (pointCount - 1),
+          );
+
+    setHoverPosition(
+      nearestNumericPosition(
+        points,
+        requestedPosition,
+      ),
+    );
+  }
 
   return (
     <div
@@ -195,137 +353,242 @@ export function TimeSeriesChart({
         </span>
       </div>
 
-      <svg
-        viewBox={`0 0 ${width} ${height}`}
-        role="img"
-        aria-label={ariaLabel}
+      <div
         style={{
-          width: "100%",
-          height: "auto",
-          minHeight: "240px",
-          overflow: "visible",
+          minHeight: "44px",
+          display: "flex",
+          alignItems: "center",
+          gap: "14px",
+          padding: "8px 10px",
+          border: hoveredPoint
+            ? "1px solid CanvasText"
+            : "1px solid transparent",
+          borderRadius: "6px",
+          background: hoveredPoint
+            ? "Canvas"
+            : "transparent",
         }}
       >
-        <line
-          x1={padding.left}
-          y1={padding.top}
-          x2={padding.left}
-          y2={
-            height - padding.bottom
-          }
-          stroke="currentColor"
-          opacity="0.25"
-          vectorEffect="non-scaling-stroke"
-        />
-
-        <line
-          x1={padding.left}
-          y1={
-            height - padding.bottom
-          }
-          x2={
-            width - padding.right
-          }
-          y2={
-            height - padding.bottom
-          }
-          stroke="currentColor"
-          opacity="0.25"
-          vectorEffect="non-scaling-stroke"
-        />
-
-        <line
-          x1={padding.left}
-          y1={padding.top}
-          x2={
-            width - padding.right
-          }
-          y2={padding.top}
-          stroke="currentColor"
-          opacity="0.08"
-          vectorEffect="non-scaling-stroke"
-        />
-
-        <line
-          x1={padding.left}
-          y1={
-            padding.top +
-            plotHeight / 2
-          }
-          x2={
-            width - padding.right
-          }
-          y2={
-            padding.top +
-            plotHeight / 2
-          }
-          stroke="currentColor"
-          opacity="0.08"
-          vectorEffect="non-scaling-stroke"
-        />
-
-        {segments.map(
-          (segment, index) => (
-            <polyline
-              key={index}
-              points={segment}
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinejoin="round"
-              strokeLinecap="round"
-              vectorEffect="non-scaling-stroke"
-            />
-          ),
+        {hoveredPoint ? (
+          <>
+            <strong>Inspecting</strong>
+            <span>
+              {hoveredPoint.label}
+            </span>
+            <span>
+              Value{" "}
+              <strong>
+                {hoveredPoint.value?.toLocaleString()}
+              </strong>
+            </span>
+            <span>
+              Position{" "}
+              <strong>
+                {hoveredPoint.index}
+              </strong>
+            </span>
+          </>
+        ) : (
+          <span
+            style={{
+              opacity: 0.7,
+            }}
+          >
+            Hover over the plot to inspect the nearest observed point.
+          </span>
         )}
+      </div>
 
-        {resolvedMarkers.map(
-          (marker) => (
-            <circle
-              key={`${marker.index}-${marker.label ?? ""}`}
-              cx={marker.x}
-              cy={marker.y}
-              r="5"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              vectorEffect="non-scaling-stroke"
-            >
-              {(marker.title ||
-                marker.label) && (
-                <title>
-                  {marker.title ??
-                    marker.label}
-                </title>
-              )}
-            </circle>
-          ),
-        )}
-
-        <text
-          x={padding.left - 10}
-          y={padding.top + 4}
-          textAnchor="end"
-          fontSize="14"
-          fill="currentColor"
-        >
-          {observedMax.toLocaleString()}
-        </text>
-
-        <text
-          x={padding.left - 10}
-          y={
-            height -
-            padding.bottom +
-            4
+      <div
+        style={{
+          position: "relative",
+          width: "100%",
+        }}
+      >
+        <svg
+          viewBox={`0 0 ${width} ${height}`}
+          role="img"
+          aria-label={ariaLabel}
+          onPointerMove={
+            handlePointerMove
           }
-          textAnchor="end"
-          fontSize="14"
-          fill="currentColor"
+          onPointerLeave={() =>
+            setHoverPosition(null)
+          }
+          shapeRendering="geometricPrecision"
+          style={{
+            width: "100%",
+            height: "auto",
+            minHeight: "280px",
+            overflow: "visible",
+            cursor: "crosshair",
+          }}
         >
-          {observedMin.toLocaleString()}
-        </text>
-      </svg>
+          <line
+            x1={padding.left}
+            y1={padding.top}
+            x2={padding.left}
+            y2={
+              height - padding.bottom
+            }
+            stroke="CanvasText"
+            opacity="0.85"
+            strokeWidth="2"
+            vectorEffect="non-scaling-stroke"
+          />
+
+          <line
+            x1={padding.left}
+            y1={
+              height - padding.bottom
+            }
+            x2={
+              width - padding.right
+            }
+            y2={
+              height - padding.bottom
+            }
+            stroke="CanvasText"
+            opacity="0.85"
+            strokeWidth="2"
+            vectorEffect="non-scaling-stroke"
+          />
+
+
+          {segments.map(
+            (segment, index) => (
+              <polyline
+                key={index}
+                points={segment}
+                fill="none"
+                stroke="CanvasText"
+                strokeWidth="3.8"
+                strokeLinejoin="round"
+                strokeLinecap="round"
+                vectorEffect="non-scaling-stroke"
+              />
+            ),
+          )}
+
+          {resolvedMarkers.map(
+            (marker) => (
+              <circle
+                key={`${marker.index}-${marker.label ?? ""}`}
+                cx={marker.x}
+                cy={marker.y}
+                r="6"
+                fill="Canvas"
+                stroke="CanvasText"
+                strokeWidth="3"
+                vectorEffect="non-scaling-stroke"
+              >
+                {(marker.title ||
+                  marker.label) && (
+                    <title>
+                      {marker.title ??
+                        marker.label}
+                    </title>
+                  )}
+              </circle>
+            ),
+          )}
+
+          {hoveredX !== null &&
+            hoveredY !== null &&
+            hoveredPoint && (
+              <>
+                <line
+                  x1={hoveredX}
+                  y1={padding.top}
+                  x2={hoveredX}
+                  y2={
+                    height -
+                    padding.bottom
+                  }
+                  stroke="CanvasText"
+                  opacity="0.85"
+                  strokeWidth="2.4"
+                  strokeDasharray="7 5"
+                  vectorEffect="non-scaling-stroke"
+                />
+
+                <circle
+                  cx={hoveredX}
+                  cy={hoveredY}
+                  r="10"
+                  fill="none"
+                  stroke="CanvasText"
+                  strokeWidth="2"
+                  opacity="0.65"
+                  vectorEffect="non-scaling-stroke"
+                />
+
+                <circle
+                  cx={hoveredX}
+                  cy={hoveredY}
+                  r="5.5"
+                  fill="CanvasText"
+                  stroke="Canvas"
+                  strokeWidth="2.5"
+                  vectorEffect="non-scaling-stroke"
+                />
+              </>
+            )}
+
+          {yTicks.map(
+            (tick, index) => (
+              <g key={`y-tick-${index}`}>
+                <line
+                  x1={padding.left}
+                  y1={tick.y}
+                  x2={width - padding.right}
+                  y2={tick.y}
+                  stroke="CanvasText"
+                  opacity={
+                    index === 0 ||
+                    index === yTicks.length - 1
+                      ? 0.22
+                      : 0.14
+                  }
+                  strokeWidth="1.2"
+                  vectorEffect="non-scaling-stroke"
+                />
+
+                <line
+                  x1={padding.left - 7}
+                  y1={tick.y}
+                  x2={padding.left}
+                  y2={tick.y}
+                  stroke="CanvasText"
+                  opacity="0.85"
+                  strokeWidth="2"
+                  vectorEffect="non-scaling-stroke"
+                />
+
+                <text
+                  x={padding.left - 14}
+                  y={tick.y + 7}
+                  textAnchor="end"
+                  fontSize="22"
+                  fontWeight="600"
+                  fill="CanvasText"
+                  opacity="0.95"
+                >
+                  {Number(
+                    tick.value.toFixed(
+                      Math.abs(tick.value) < 10 &&
+                      tick.value % 1 !== 0
+                        ? 1
+                        : 0,
+                    ),
+                  ).toLocaleString()}
+                </text>
+              </g>
+            ),
+          )}
+        </svg>
+
+      </div>
 
       <div
         style={{
@@ -333,6 +596,8 @@ export function TimeSeriesChart({
           justifyContent:
             "space-between",
           gap: "16px",
+          fontWeight: 600,
+          color: "CanvasText",
         }}
       >
         <span>{firstLabel}</span>
