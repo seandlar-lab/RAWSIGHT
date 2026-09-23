@@ -1,12 +1,20 @@
 import type {
   WideTemporalSeriesDetail,
 } from "../types/wideTemporalExplore";
+import type {
+  WideTemporalReferenceProfile,
+} from "../types/wideTemporalReference";
 import {
   WideTemporalSeriesChart,
 } from "./WideTemporalSeriesChart";
+import {
+  WideTemporalReferenceChart,
+} from "./WideTemporalReferenceChart";
 
 type Props = {
   detail: WideTemporalSeriesDetail;
+  reference: WideTemporalReferenceProfile | null;
+  isReferenceLoading: boolean;
   onClose: () => void;
 };
 
@@ -22,6 +30,8 @@ function formatScalar(
 
 export function WideTemporalSeriesDetailPanel({
   detail,
+  reference,
+  isReferenceLoading,
   onClose,
 }: Props) {
   const firstPoint =
@@ -138,6 +148,58 @@ export function WideTemporalSeriesDetailPanel({
           </strong>
         </span>
       </div>
+
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "16px",
+          padding: "10px 12px",
+          border: "1px solid currentColor",
+          borderRadius: "6px",
+          opacity: 0.9,
+        }}
+      >
+        <strong>Dataset reference profile</strong>
+
+        {reference ? (
+          <>
+            <span>
+              Population{" "}
+              <strong>
+                {reference.population_count.toLocaleString()}
+              </strong>
+            </span>
+
+            <span>
+              Time positions{" "}
+              <strong>
+                {reference.temporal_position_count.toLocaleString()}
+              </strong>
+            </span>
+
+            <span>
+              Statistics{" "}
+              <strong>
+                {reference.statistics_mode}
+              </strong>
+            </span>
+          </>
+        ) : (
+          <span>
+            {isReferenceLoading
+              ? "Building reference population..."
+              : "Reference population not available."}
+          </span>
+        )}
+      </div>
+
+      {reference && (
+        <WideTemporalReferenceChart
+          detail={detail}
+          reference={reference}
+        />
+      )}
 
       <WideTemporalSeriesChart
         detail={detail}

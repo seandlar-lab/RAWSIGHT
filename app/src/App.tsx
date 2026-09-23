@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -20,6 +20,9 @@ import type {
   WideTemporalSeriesPage,
   WideTemporalSeriesSummary,
 } from "./types/wideTemporalExplore";
+import type {
+  WideTemporalReferenceExecution,
+} from "./types/wideTemporalReference";
 
 type FileInfo = {
   name: string;
@@ -446,6 +449,17 @@ function App() {
   const [wideTemporalSeriesDetail, setWideTemporalSeriesDetail] =
     useState<WideTemporalSeriesDetail | null>(null);
   const [
+    wideTemporalReference,
+    setWideTemporalReference,
+  ] = useState<WideTemporalReferenceExecution | null>(null);
+  const [
+    isLoadingWideTemporalReference,
+    setIsLoadingWideTemporalReference,
+  ] = useState(false);
+  const wideTemporalReferencePromiseRef = useRef<
+    Promise<WideTemporalReferenceExecution | null> | null
+  >(null);
+  const [
     isLoadingWideTemporalSeries,
     setIsLoadingWideTemporalSeries,
   ] = useState(false);
@@ -537,6 +551,9 @@ function App() {
     setWideTemporalSeriesDetail(null);
     setWideTemporalSeriesClassification("");
     setWideTemporalSeriesLoadingIndex(null);
+    setWideTemporalReference(null);
+    setIsLoadingWideTemporalReference(false);
+    wideTemporalReferencePromiseRef.current = null;
   }, [fileInfo?.path]);
 
   async function exitApplication() {
@@ -1087,6 +1104,69 @@ function App() {
       setIsAnalyzing(false);
     }
   }
+  async function loadWideTemporalReference(
+  ): Promise<WideTemporalReferenceExecution | null> {
+    if (wideTemporalReference) {
+      return wideTemporalReference;
+    }
+
+    if (wideTemporalReferencePromiseRef.current) {
+      return wideTemporalReferencePromiseRef.current;
+    }
+
+    if (!fileInfo) {
+      return null;
+    }
+
+    const temporalAxisJson =
+      buildWideTemporalAxisContext(profile);
+
+    if (!temporalAxisJson) {
+      setError(
+        "Reference profiling requires the horizontal temporal axis established by Light Analysis.",
+      );
+      return null;
+    }
+
+    setIsLoadingWideTemporalReference(true);
+
+    const request = (async () => {
+      try {
+        const rawResult = await invoke<string>(
+          "explore_wide_temporal_reference",
+          {
+            path: fileInfo.path,
+            temporalAxisJson,
+          },
+        );
+
+        const parsedResult = JSON.parse(
+          rawResult,
+        ) as WideTemporalReferenceExecution;
+
+        setWideTemporalReference(
+          parsedResult,
+        );
+
+        return parsedResult;
+      } catch (err) {
+        setError(String(err));
+        return null;
+      } finally {
+        setIsLoadingWideTemporalReference(
+          false,
+        );
+        wideTemporalReferencePromiseRef.current =
+          null;
+      }
+    })();
+
+    wideTemporalReferencePromiseRef.current =
+      request;
+
+    return request;
+  }
+
   async function loadWideTemporalSeriesPage(
     offset: number,
   ): Promise<WideTemporalSeriesPage | null> {
@@ -1127,6 +1207,8 @@ function App() {
 
       setWideTemporalSeriesPage(parsedResult);
       setWideTemporalSeriesDetail(null);
+
+      void loadWideTemporalReference();
 
       return parsedResult;
     } catch (err) {
@@ -2008,6 +2090,13 @@ function App() {
                                                         <WideTemporalSeriesDetailPanel
                                                           detail={
                                                             wideTemporalSeriesDetail
+                                                          }
+                                                          reference={
+                                                            wideTemporalReference?.reference_profile ??
+                                                            null
+                                                          }
+                                                          isReferenceLoading={
+                                                            isLoadingWideTemporalReference
                                                           }
                                                           onClose={() => {
                                                             setWideTemporalSeriesDetail(
