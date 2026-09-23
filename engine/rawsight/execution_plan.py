@@ -189,3 +189,143 @@ def build_wide_temporal_execution_plan(
         materialization_required=False,
         resource_snapshot=resource_snapshot,
     )
+
+
+def build_wide_temporal_reference_execution_plan(
+    *,
+    population_count: int,
+    temporal_position_count: int,
+    resource_snapshot: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """
+    Build a resource-aware plan for the current exact reference-profile
+    implementation.
+
+    The current exact analyzer streams the source but retains numeric
+    observations as 64-bit doubles so exact percentiles can be produced.
+
+    `population_count * temporal_position_count * 8` is therefore a
+    structural upper bound for the retained numeric payload when every
+    observation is numeric.
+
+    Important: this is NOT a peak-working-set estimate. Python object
+    overhead, per-position containers, sorting workspaces, source-reader
+    buffers, DuckDB memory, and result serialization all add memory.
+
+    The retained payload comparison is still useful:
+      - if this payload alone exceeds currently available memory, the
+        current exact strategy cannot safely fit as implemented;
+      - if it fits, exact execution is only a candidate and peak memory
+        still needs validation.
+
+    No arbitrary dataset-size or memory-percentage threshold is used.
+    """
+
+    if population_count < 0:
+        raise ValueError(
+            "population_count must be >= 0"
+        )
+
+    if temporal_position_count < 1:
+        raise ValueError(
+            "temporal_position_count must be >= 1"
+        )
+
+    snapshot = (
+        resource_snapshot
+        if resource_snapshot is not None
+        else inspect_memory_resources()
+    )
+
+    max_numeric_observations = (
+        population_count
+        * temporal_position_count
+    )
+
+    retained_numeric_payload_upper_bound_bytes = (
+        max_numeric_observations
+        * 8
+    )
+
+    payload_comparison = (
+        compare_working_set_to_available_memory(
+            retained_numeric_payload_upper_bound_bytes,
+            snapshot,
+        )
+    )
+
+    payload_fits = payload_comparison.get(
+        "fits_currently_available_memory"
+    )
+
+    if payload_fits is True:
+        exact_assessment = (
+            "exact_candidate_peak_not_yet_validated"
+        )
+        exact_candidate = True
+
+    elif payload_fits is False:
+        exact_assessment = (
+            "retained_payload_exceeds_"
+            "currently_available_memory"
+        )
+        exact_candidate = False
+
+    else:
+        exact_assessment = (
+            "resource_comparison_unavailable"
+        )
+        exact_candidate = None
+
+    plan = build_execution_plan(
+        analysis_strategy=(
+            "wide_temporal_reference"
+        ),
+        execution_mode=(
+            "streaming_exact_candidate"
+        ),
+        estimated_peak_bytes=None,
+        estimate_basis=(
+            "peak_working_set_not_yet_estimated"
+        ),
+        estimate_confidence=None,
+        streaming_capable=True,
+        materialization_required=True,
+        resource_snapshot=snapshot,
+    )
+
+    return {
+        **plan,
+        "reference_statistics_plan": {
+            "requested_statistics_mode": (
+                "exact"
+            ),
+            "population_count": (
+                population_count
+            ),
+            "temporal_position_count": (
+                temporal_position_count
+            ),
+            "max_numeric_observations": (
+                max_numeric_observations
+            ),
+            "retained_numeric_payload_upper_bound_bytes": (
+                retained_numeric_payload_upper_bound_bytes
+            ),
+            "retained_payload_comparison": (
+                payload_comparison
+            ),
+            "exact_candidate": (
+                exact_candidate
+            ),
+            "exact_assessment": (
+                exact_assessment
+            ),
+            "limitations": {
+                "payload_is_not_peak_working_set": True,
+                "runtime_overhead_not_estimated": True,
+                "sorting_workspace_not_estimated": True,
+                "source_buffering_not_estimated": True,
+            },
+        },
+    }
