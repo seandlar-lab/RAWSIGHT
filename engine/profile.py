@@ -12,6 +12,9 @@ from rawsight.wide_temporal_execution import (
     execute_wide_temporal_series_detail,
     execute_wide_temporal_series_page,
 )
+from rawsight.wide_temporal_reference_execution import (
+    execute_wide_temporal_reference,
+)
 
 
 def _print_result(result: dict) -> None:
@@ -295,6 +298,37 @@ def _run_wide_temporal_series_detail_context(
     )
 
 
+def _run_wide_temporal_reference_context(
+    arguments: list[str],
+) -> dict:
+    """
+    Build the dataset-wide reference population using temporal
+    structural context already established by Light Analysis.
+
+    This command deliberately does not re-run Detect/Normalize.
+    """
+
+    if len(arguments) != 3:
+        raise ValueError(
+            "wide-temporal-reference-context requires: "
+            "<path> <temporal_axis_json>"
+        )
+
+    file_path = arguments[1]
+    temporal_axis = (
+        _validated_temporal_axis_from_json(
+            arguments[2]
+        )
+    )
+
+    return (
+        execute_wide_temporal_reference(
+            file_path=file_path,
+            temporal_axis=temporal_axis,
+        )
+    )
+
+
 def main(arguments: list[str]) -> int:
     """
     Backward-compatible engine entrypoint.
@@ -308,6 +342,9 @@ def main(arguments: list[str]) -> int:
 
         profile.py wide-temporal-series-detail
             <path> <series_index>
+
+        profile.py wide-temporal-reference-context
+            <path> <temporal_axis_json>
     """
 
     if not arguments:
@@ -338,6 +375,12 @@ def main(arguments: list[str]) -> int:
     elif command == "wide-temporal-series-detail-context":
         result = (
             _run_wide_temporal_series_detail_context(
+                arguments
+            )
+        )
+    elif command == "wide-temporal-reference-context":
+        result = (
+            _run_wide_temporal_reference_context(
                 arguments
             )
         )
