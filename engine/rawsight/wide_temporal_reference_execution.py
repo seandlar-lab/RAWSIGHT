@@ -8,6 +8,10 @@ from rawsight.source_context import (
 from rawsight.wide_temporal_reference import (
     WideTemporalReferenceAnalyzer,
 )
+from rawsight.wide_temporal_reference_artifact import (
+    load_reference_artifact_manifest,
+    write_reference_artifact,
+)
 
 
 ProgressCallback = Callable[[str], None]
@@ -122,7 +126,106 @@ def _attach_axis_metadata(
     }
 
 
+def _cached_result(
+    file_path: str,
+    temporal_axis: dict[str, Any],
+) -> dict[str, Any] | None:
+    artifact = (
+        load_reference_artifact_manifest(
+            file_path=file_path,
+            temporal_axis=temporal_axis,
+        )
+    )
+
+    if artifact is None:
+        return None
+
+    reference_profile = (
+        artifact.get(
+            "reference_profile"
+        )
+    )
+
+    execution_metadata = (
+        artifact.get(
+            "execution_metadata"
+        )
+    )
+
+    if not isinstance(
+        reference_profile,
+        dict,
+    ):
+        return None
+
+    if not isinstance(
+        execution_metadata,
+        dict,
+    ):
+        return None
+
+    rows_processed = (
+        execution_metadata.get(
+            "rows_processed"
+        )
+    )
+    dataset_column_count = (
+        execution_metadata.get(
+            "dataset_column_count"
+        )
+    )
+    temporal_column_count = (
+        execution_metadata.get(
+            "temporal_column_count"
+        )
+    )
+
+    if not isinstance(
+        rows_processed,
+        int,
+    ):
+        return None
+
+    if not isinstance(
+        dataset_column_count,
+        int,
+    ):
+        return None
+
+    if not isinstance(
+        temporal_column_count,
+        int,
+    ):
+        return None
+
+    return {
+        "status": "measured",
+        "analysis_kind": (
+            "wide_temporal_reference_execution"
+        ),
+        "execution_mode": (
+            "cached_exact"
+        ),
+        "cache_status": "hit",
+        "source_scan_performed": False,
+        "source_rows_scanned_this_execution": 0,
+        "rows_processed": (
+            rows_processed
+        ),
+        "dataset_column_count": (
+            dataset_column_count
+        ),
+        "temporal_column_count": (
+            temporal_column_count
+        ),
+        "reference_profile": (
+            reference_profile
+        ),
+    }
+
+
 def _execute_with_context(
+    file_path: str,
     source_context: SourceExecutionContext,
     temporal_axis: dict[str, Any],
     progress: ProgressCallback | None,
@@ -198,6 +301,48 @@ def _execute_with_context(
         )
     )
 
+    cache_status = "built"
+
+    try:
+        write_reference_artifact(
+            file_path=file_path,
+            temporal_axis=temporal_axis,
+            ordered_reference_values=(
+                analyzer.ordered_reference_values()
+            ),
+            population_count=(
+                analyzer.population_count
+            ),
+            statistics_mode=(
+                analysis[
+                    "statistics_mode"
+                ]
+            ),
+            percentile_method=(
+                analysis[
+                    "percentile_method"
+                ]
+            ),
+            reference_profile=(
+                reference_profile
+            ),
+            execution_metadata={
+                "rows_processed": (
+                    rows_processed
+                ),
+                "dataset_column_count": (
+                    len(column_names)
+                ),
+                "temporal_column_count": (
+                    temporal_column_count
+                ),
+            },
+        )
+    except OSError:
+        # Cache persistence is an optimization. A cache-write failure
+        # must not invalidate a successfully calculated analysis.
+        cache_status = "write_failed"
+
     return {
         "status": "measured",
         "analysis_kind": (
@@ -205,6 +350,13 @@ def _execute_with_context(
         ),
         "execution_mode": (
             "streaming_exact"
+        ),
+        "cache_status": (
+            cache_status
+        ),
+        "source_scan_performed": True,
+        "source_rows_scanned_this_execution": (
+            rows_processed
         ),
         "rows_processed": (
             rows_processed
@@ -230,18 +382,36 @@ def execute_wide_temporal_reference(
     ) = None,
 ) -> dict[str, Any]:
     """
-    Build one exact dataset reference profile for a wide-temporal axis.
+    Return one exact dataset reference profile for a wide-temporal axis.
 
-    The source is scanned once. Counts and sums are accumulated during
-    that scan. Numeric observations are retained compactly by the
-    analysis layer because exact percentiles require the distribution.
+    A valid disposable artifact is reused before the source is scanned.
+    Artifact identity includes source path, file size, modified time,
+    temporal axis and artifact format version.
+
+    On a cache miss the source is scanned once. Exact distributions are
+    finalized, the reference profile is calculated, and both are stored
+    in the disposable artifact for later processes.
 
     No dataset-size threshold or acceptance limit is encoded here.
 
     If a SourceExecutionContext is supplied, the caller owns its
-    lifecycle and the already-open source is reused. Otherwise this
-    function opens and deterministically closes its own source context.
+    lifecycle. The artifact may still satisfy the request without
+    scanning that context.
     """
+
+    cached = _cached_result(
+        file_path=file_path,
+        temporal_axis=temporal_axis,
+    )
+
+    if cached is not None:
+        if progress is not None:
+            progress(
+                "Reusing wide temporal "
+                "reference artifact"
+            )
+
+        return cached
 
     if source_context is not None:
         source_context.assert_source(
@@ -255,6 +425,7 @@ def execute_wide_temporal_reference(
             )
 
         return _execute_with_context(
+            file_path=file_path,
             source_context=source_context,
             temporal_axis=temporal_axis,
             progress=progress,
@@ -270,6 +441,7 @@ def execute_wide_temporal_reference(
         file_path
     ) as owned_context:
         return _execute_with_context(
+            file_path=file_path,
             source_context=owned_context,
             temporal_axis=temporal_axis,
             progress=progress,
