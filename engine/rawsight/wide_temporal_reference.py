@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from array import array
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 
 from rawsight.wide_temporal_series import (
     _classify_value,
@@ -18,7 +18,7 @@ _PERCENTILES = (
 
 
 def _exact_percentile(
-    sorted_values: list[float],
+    sorted_values: Sequence[float],
     quantile: float,
 ) -> float | None:
     """
@@ -79,14 +79,17 @@ class WideTemporalReferenceAnalyzer:
         wide-temporal series analysis
       - accumulate per-position coverage and numeric totals
       - retain compact numeric observations for exact percentiles
-      - calculate one distribution per temporal position
+      - finalize each per-position distribution into ascending order
+        exactly once
+      - reuse the finalized distributions for both summary statistics
+        and later exact series comparisons
 
     Execution responsibilities intentionally remain elsewhere:
       - opening files
       - choosing exact vs approximate statistics
       - choosing batching / partitioning
       - assessing available machine resources
-      - deciding whether to cache or reuse the result
+      - deciding whether to cache or persist finalized distributions
 
     Exact percentiles necessarily retain numeric observations. Values
     are stored in array('d') rather than Python float lists so the
@@ -107,6 +110,7 @@ class WideTemporalReferenceAnalyzer:
             position_count
         )
         self.population_count = 0
+        self._finalized = False
 
         self.numeric_count = [
             0
@@ -139,6 +143,10 @@ class WideTemporalReferenceAnalyzer:
             )
         ]
 
+    @property
+    def is_finalized(self) -> bool:
+        return self._finalized
+
     def observe_series(
         self,
         values: Iterable[object],
@@ -148,7 +156,16 @@ class WideTemporalReferenceAnalyzer:
 
         Width mismatch is structural inconsistency and is rejected
         rather than silently padded or truncated.
+
+        Finalization closes the observation phase. Additional series
+        cannot be observed after distributions have been sorted.
         """
+
+        if self._finalized:
+            raise RuntimeError(
+                "Reference analyzer is finalized "
+                "and cannot observe more series"
+            )
 
         observed_count = 0
 
@@ -218,6 +235,55 @@ class WideTemporalReferenceAnalyzer:
                 values
             )
 
+    def finalize(self) -> None:
+        """
+        Sort every retained numeric distribution exactly once.
+
+        The compact array('d') representation is preserved after
+        sorting. Repeated result generation and exact comparison can
+        therefore reuse the same ordered distributions without another
+        sort.
+
+        Calling finalize repeatedly is intentionally idempotent.
+        """
+
+        if self._finalized:
+            return
+
+        for position in range(
+            self.position_count
+        ):
+            values = self.numeric_values[
+                position
+            ]
+
+            if len(values) > 1:
+                self.numeric_values[
+                    position
+                ] = array(
+                    "d",
+                    sorted(values),
+                )
+
+        self._finalized = True
+
+    def ordered_reference_values(
+        self,
+    ) -> tuple[Sequence[float], ...]:
+        """
+        Return finalized per-position distributions for read-only use.
+
+        The tuple prevents callers from adding/removing positions.
+        Individual arrays remain internal mutable objects and must be
+        treated as read-only by callers.
+        """
+
+        self.finalize()
+
+        return tuple(
+            self.numeric_values
+        )
+
     def result(self) -> dict:
         """
         Return exact per-position reference statistics.
@@ -225,7 +291,11 @@ class WideTemporalReferenceAnalyzer:
         None means that a statistic could not be evaluated because the
         temporal position contained no numeric observations. A measured
         zero remains 0.0 and is never replaced by None.
+
+        Distributions are finalized once and then reused.
         """
+
+        self.finalize()
 
         positions = []
 
@@ -253,7 +323,7 @@ class WideTemporalReferenceAnalyzer:
                     / numeric_count
                 )
 
-                ordered_values = sorted(
+                ordered_values = (
                     self.numeric_values[
                         position
                     ]
