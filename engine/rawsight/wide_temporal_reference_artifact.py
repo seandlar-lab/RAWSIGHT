@@ -651,8 +651,12 @@ def load_reference_artifact(
     ):
         return None
 
+    values_view = memoryview(
+        values
+    )
+
     distributions = tuple(
-        values[
+        values_view[
             offsets[index]:
             offsets[index + 1]
         ]
