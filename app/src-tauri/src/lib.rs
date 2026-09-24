@@ -344,6 +344,26 @@ fn explore_wide_temporal_reference(
     )
 }
 
+
+#[tauri::command(async)]
+fn explore_wide_temporal_reference_comparison(
+    path: String,
+    temporal_axis_json: String,
+    series_index: u64,
+) -> Result<String, String> {
+    let arguments = vec![
+        "wide-temporal-reference-comparison-context".to_string(),
+        path,
+        temporal_axis_json,
+        series_index.to_string(),
+    ];
+
+    run_profile_json_command(
+        &arguments,
+        "Wide temporal reference comparison",
+    )
+}
+
 #[tauri::command(async)]
 fn raw_analysis_dataset(
     path: String,
@@ -994,6 +1014,7 @@ pub fn run() {
             explore_wide_temporal_series_page,
             explore_wide_temporal_series_detail,
             explore_wide_temporal_reference,
+            explore_wide_temporal_reference_comparison,
 			raw_analysis_dataset,
             raw_analysis_temporal_dataset,
             inspect_rows,
