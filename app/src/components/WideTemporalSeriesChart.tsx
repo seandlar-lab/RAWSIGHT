@@ -11,10 +11,18 @@ import type {
 
 type Props = {
   detail: WideTemporalSeriesDetail;
+  inspectionIndex: number | null;
+  inspectionLocked: boolean;
+  onInspectionHover: (index: number | null) => void;
+  onInspectionToggle: (index: number) => void;
 };
 
 export function WideTemporalSeriesChart({
   detail,
+  inspectionIndex,
+  inspectionLocked,
+  onInspectionHover,
+  onInspectionToggle,
 }: Props) {
   const points: TimeSeriesPoint[] =
     detail.temporal_points.map(
@@ -58,6 +66,18 @@ export function WideTemporalSeriesChart({
       markerLegend={
         "Hollow markers show observed " +
         "negative adjacent transitions."
+      }
+      inspectionIndex={
+        inspectionIndex
+      }
+      inspectionLocked={
+        inspectionLocked
+      }
+      onInspectionHover={
+        onInspectionHover
+      }
+      onInspectionToggle={
+        onInspectionToggle
       }
     />
   );

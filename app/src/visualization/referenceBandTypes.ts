@@ -1,3 +1,5 @@
+import type { InspectionLinkProps } from "./inspectionTypes";
+
 export type ReferenceBandPoint = {
   index: number;
   label: string;
@@ -11,7 +13,7 @@ export type ReferenceBandPoint = {
   numericCount: number;
 };
 
-export type ReferenceBandChartProps = {
+export type ReferenceBandChartProps = InspectionLinkProps & {
   points: ReferenceBandPoint[];
   title?: string;
   ariaLabel?: string;

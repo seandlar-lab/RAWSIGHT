@@ -95,6 +95,10 @@ export function TimeSeriesChart({
   title = "Time series",
   ariaLabel = "Time series chart",
   markerLegend,
+  inspectionIndex,
+  inspectionLocked = false,
+  onInspectionHover,
+  onInspectionToggle,
 }: TimeSeriesChartProps) {
   const width = 720;
   const height = 340;
@@ -211,6 +215,18 @@ export function TimeSeriesChart({
     ),
   );
 
+  const linkedPosition =
+    inspectionIndex === undefined ||
+    inspectionIndex === null
+      ? null
+      : positionByIndex.get(
+          inspectionIndex,
+        ) ?? null;
+
+  const activePosition =
+    linkedPosition ??
+    hoverPosition;
+
   const resolvedMarkers = markers
     .map((marker) => {
       const position =
@@ -265,14 +281,14 @@ export function TimeSeriesChart({
   );
 
   const hoveredPoint =
-    hoverPosition === null
+    activePosition === null
       ? null
-      : points[hoverPosition] ?? null;
+      : points[activePosition] ?? null;
 
   const hoveredX =
-    hoverPosition === null
+    activePosition === null
       ? null
-      : xForPosition(hoverPosition);
+      : xForPosition(activePosition);
 
   const hoveredY =
     hoveredPoint?.value === null ||
@@ -317,11 +333,52 @@ export function TimeSeriesChart({
               (pointCount - 1),
           );
 
+    const boundedPosition =
+      Math.max(
+        0,
+        Math.min(
+          pointCount - 1,
+          requestedPosition,
+        ),
+      );
+
+    const localPosition =
+      onInspectionHover
+        ? boundedPosition
+        : nearestNumericPosition(
+            points,
+            boundedPosition,
+          );
+
     setHoverPosition(
-      nearestNumericPosition(
-        points,
-        requestedPosition,
-      ),
+      localPosition,
+    );
+
+    if (
+      onInspectionHover &&
+      localPosition !== null
+    ) {
+      onInspectionHover(
+        points[localPosition].index,
+      );
+    }
+  }
+
+  function handlePointerLeave() {
+    setHoverPosition(null);
+    onInspectionHover?.(null);
+  }
+
+  function handleClick() {
+    if (
+      hoverPosition === null ||
+      !onInspectionToggle
+    ) {
+      return;
+    }
+
+    onInspectionToggle(
+      points[hoverPosition].index,
     );
   }
 
@@ -371,14 +428,20 @@ export function TimeSeriesChart({
       >
         {hoveredPoint ? (
           <>
-            <strong>Inspecting</strong>
+            <strong>
+              {inspectionLocked
+                ? "Locked"
+                : "Inspecting"}
+            </strong>
             <span>
               {hoveredPoint.label}
             </span>
             <span>
               Value{" "}
               <strong>
-                {hoveredPoint.value?.toLocaleString()}
+                {hoveredPoint.value === null
+                  ? "—"
+                  : hoveredPoint.value.toLocaleString()}
               </strong>
             </span>
             <span>
@@ -412,9 +475,10 @@ export function TimeSeriesChart({
           onPointerMove={
             handlePointerMove
           }
-          onPointerLeave={() =>
-            setHoverPosition(null)
+          onPointerLeave={
+            handlePointerLeave
           }
+          onClick={handleClick}
           shapeRendering="geometricPrecision"
           style={{
             width: "100%",
@@ -494,7 +558,6 @@ export function TimeSeriesChart({
           )}
 
           {hoveredX !== null &&
-            hoveredY !== null &&
             hoveredPoint && (
               <>
                 <line
@@ -508,30 +571,38 @@ export function TimeSeriesChart({
                   stroke="CanvasText"
                   opacity="0.85"
                   strokeWidth="2.4"
-                  strokeDasharray="7 5"
+                  strokeDasharray={
+                    inspectionLocked
+                      ? undefined
+                      : "7 5"
+                  }
                   vectorEffect="non-scaling-stroke"
                 />
 
-                <circle
-                  cx={hoveredX}
-                  cy={hoveredY}
-                  r="10"
-                  fill="none"
-                  stroke="CanvasText"
-                  strokeWidth="2"
-                  opacity="0.65"
-                  vectorEffect="non-scaling-stroke"
-                />
+                {hoveredY !== null && (
+                  <>
+                    <circle
+                      cx={hoveredX}
+                      cy={hoveredY}
+                      r="10"
+                      fill="none"
+                      stroke="CanvasText"
+                      strokeWidth="2"
+                      opacity="0.65"
+                      vectorEffect="non-scaling-stroke"
+                    />
 
-                <circle
-                  cx={hoveredX}
-                  cy={hoveredY}
-                  r="5.5"
-                  fill="CanvasText"
-                  stroke="Canvas"
-                  strokeWidth="2.5"
-                  vectorEffect="non-scaling-stroke"
-                />
+                    <circle
+                      cx={hoveredX}
+                      cy={hoveredY}
+                      r="5.5"
+                      fill="CanvasText"
+                      stroke="Canvas"
+                      strokeWidth="2.5"
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  </>
+                )}
               </>
             )}
 

@@ -1,3 +1,5 @@
+import type { InspectionLinkProps } from "./inspectionTypes";
+
 export type TimeSeriesPoint = {
   index: number;
   label: string;
@@ -11,7 +13,7 @@ export type TimeSeriesMarker = {
   title?: string;
 };
 
-export type TimeSeriesChartProps = {
+export type TimeSeriesChartProps = InspectionLinkProps & {
   points: TimeSeriesPoint[];
   markers?: TimeSeriesMarker[];
   title?: string;

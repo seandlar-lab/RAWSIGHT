@@ -14,6 +14,10 @@ import type {
 type Props = {
   detail: WideTemporalSeriesDetail;
   reference: WideTemporalReferenceProfile;
+  inspectionIndex: number | null;
+  inspectionLocked: boolean;
+  onInspectionHover: (index: number | null) => void;
+  onInspectionToggle: (index: number) => void;
 };
 
 function finiteNumericValue(
@@ -32,6 +36,10 @@ function finiteNumericValue(
 export function WideTemporalReferenceChart({
   detail,
   reference,
+  inspectionIndex,
+  inspectionLocked,
+  onInspectionHover,
+  onInspectionToggle,
 }: Props) {
   const selectedByAxisIndex =
     new Map(
@@ -74,6 +82,18 @@ export function WideTemporalReferenceChart({
       title="Compared with dataset reference"
       ariaLabel={
         "Selected wide temporal series compared with the dataset reference population"
+      }
+      inspectionIndex={
+        inspectionIndex
+      }
+      inspectionLocked={
+        inspectionLocked
+      }
+      onInspectionHover={
+        onInspectionHover
+      }
+      onInspectionToggle={
+        onInspectionToggle
       }
     />
   );

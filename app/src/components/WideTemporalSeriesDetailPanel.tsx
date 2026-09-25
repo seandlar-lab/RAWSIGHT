@@ -1,20 +1,30 @@
+import { useEffect, useState } from "react";
+
 import type {
   WideTemporalSeriesDetail,
 } from "../types/wideTemporalExplore";
 import type {
   WideTemporalReferenceProfile,
 } from "../types/wideTemporalReference";
+import type {
+  WideTemporalReferenceComparisonExecution,
+} from "../types/wideTemporalReferenceComparison";
 import {
   WideTemporalSeriesChart,
 } from "./WideTemporalSeriesChart";
 import {
   WideTemporalReferenceChart,
 } from "./WideTemporalReferenceChart";
+import {
+  WideTemporalPercentilePositionChart,
+} from "./WideTemporalPercentilePositionChart";
 
 type Props = {
   detail: WideTemporalSeriesDetail;
   reference: WideTemporalReferenceProfile | null;
   isReferenceLoading: boolean;
+  comparison: WideTemporalReferenceComparisonExecution | null;
+  isComparisonLoading: boolean;
   onClose: () => void;
 };
 
@@ -32,6 +42,8 @@ export function WideTemporalSeriesDetailPanel({
   detail,
   reference,
   isReferenceLoading,
+  comparison,
+  isComparisonLoading,
   onClose,
 }: Props) {
   const firstPoint =
@@ -41,6 +53,99 @@ export function WideTemporalSeriesDetailPanel({
     detail.temporal_points[
       detail.temporal_points.length - 1
     ];
+
+  const [
+    hoveredAxisIndex,
+    setHoveredAxisIndex,
+  ] = useState<number | null>(
+    null,
+  );
+
+  const [
+    lockedAxisIndex,
+    setLockedAxisIndex,
+  ] = useState<number | null>(
+    null,
+  );
+
+  useEffect(() => {
+    setHoveredAxisIndex(null);
+    setLockedAxisIndex(null);
+  }, [detail.series_index]);
+
+  const inspectionAxisIndex =
+    lockedAxisIndex ??
+    hoveredAxisIndex;
+
+  const inspectionLocked =
+    lockedAxisIndex !== null;
+
+  const inspectedComparison =
+    inspectionAxisIndex === null
+      ? null
+      : comparison?.comparison.positions.find(
+          (position) =>
+            position.axis_index ===
+            inspectionAxisIndex,
+        ) ?? null;
+
+  const inspectedReference =
+    inspectionAxisIndex === null
+      ? null
+      : reference?.positions.find(
+          (position) =>
+            position.axis_index ===
+            inspectionAxisIndex,
+        ) ?? null;
+
+  const inspectedDetail =
+    inspectionAxisIndex === null
+      ? null
+      : detail.temporal_points.find(
+          (point) =>
+            point.axis_index ===
+            inspectionAxisIndex,
+        ) ?? null;
+
+  const inspectionLabel =
+    inspectedComparison?.label ??
+    inspectedReference?.label ??
+    inspectedDetail?.label ??
+    null;
+
+  const handleInspectionHover = (
+    index: number | null,
+  ) => {
+    if (
+      lockedAxisIndex !== null
+    ) {
+      return;
+    }
+
+    setHoveredAxisIndex(
+      index,
+    );
+  };
+
+  const handleInspectionToggle = (
+    index: number,
+  ) => {
+    setLockedAxisIndex(
+      (current) =>
+        current === index
+          ? null
+          : index,
+    );
+
+    setHoveredAxisIndex(
+      index,
+    );
+  };
+
+  const clearInspection = () => {
+    setHoveredAxisIndex(null);
+    setLockedAxisIndex(null);
+  };
 
   return (
     <div
@@ -151,6 +256,128 @@ export function WideTemporalSeriesDetailPanel({
 
       <div
         style={{
+          display: "grid",
+          gap: "8px",
+          padding: "12px",
+          border: "1px solid currentColor",
+          borderRadius: "6px",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "12px",
+            flexWrap: "wrap",
+          }}
+        >
+          <strong>
+            Linked point inspection
+          </strong>
+
+          {inspectionAxisIndex !== null && (
+            <button
+              type="button"
+              onClick={clearInspection}
+            >
+              Clear
+            </button>
+          )}
+        </div>
+
+        {inspectionAxisIndex === null ? (
+          <span
+            style={{
+              opacity: 0.75,
+            }}
+          >
+            Hover any chart to inspect the same time position in all views.
+            Click a point to lock it.
+          </span>
+        ) : (
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: "14px",
+            }}
+          >
+            <span>
+              {inspectionLocked
+                ? "Locked"
+                : "Inspecting"}{" "}
+              <strong>
+                {inspectionLabel ?? `Position ${inspectionAxisIndex}`}
+              </strong>
+            </span>
+
+            <span>
+              Selected{" "}
+              <strong>
+                {inspectedComparison?.selected_value ??
+                  (
+                    typeof inspectedDetail?.value === "number"
+                      ? inspectedDetail.value
+                      : "—"
+                  )}
+              </strong>
+            </span>
+
+            <span>
+              Population median{" "}
+              <strong>
+                {inspectedComparison?.reference_median ??
+                  inspectedReference?.p50 ??
+                  "—"}
+              </strong>
+            </span>
+
+            <span>
+              Difference{" "}
+              <strong>
+                {inspectedComparison?.difference_from_median ??
+                  "—"}
+              </strong>
+            </span>
+
+            <span>
+              Percentile{" "}
+              <strong>
+                {inspectedComparison?.percentile_position === null ||
+                inspectedComparison?.percentile_position === undefined
+                  ? "—"
+                  : `P${inspectedComparison.percentile_position.toFixed(1)}`}
+              </strong>
+            </span>
+
+            <span>
+              P25–P75{" "}
+              <strong>
+                {inspectedReference?.p25 ?? "—"}
+                {" – "}
+                {inspectedReference?.p75 ?? "—"}
+              </strong>
+            </span>
+
+            <span>
+              Numeric population{" "}
+              <strong>
+                {(
+                  inspectedComparison?.reference_numeric_count ??
+                  inspectedReference?.numeric_count
+                )?.toLocaleString() ?? "—"}
+              </strong>
+              {inspectedReference
+                ? ` / ${inspectedReference.population_count.toLocaleString()}`
+                : ""}
+            </span>
+          </div>
+        )}
+      </div>
+
+      <div
+        style={{
           display: "flex",
           flexWrap: "wrap",
           gap: "16px",
@@ -198,11 +425,105 @@ export function WideTemporalSeriesDetailPanel({
         <WideTemporalReferenceChart
           detail={detail}
           reference={reference}
+          inspectionIndex={
+            inspectionAxisIndex
+          }
+          inspectionLocked={
+            inspectionLocked
+          }
+          onInspectionHover={
+            handleInspectionHover
+          }
+          onInspectionToggle={
+            handleInspectionToggle
+          }
+        />
+      )}
+
+
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "16px",
+          padding: "10px 12px",
+          border: "1px solid currentColor",
+          borderRadius: "6px",
+          opacity: 0.9,
+        }}
+      >
+        <strong>Relative position</strong>
+
+        {comparison ? (
+          <>
+            <span>
+              Evaluated{" "}
+              <strong>
+                {comparison.comparison.evaluated_position_count.toLocaleString()}
+              </strong>
+            </span>
+
+            <span>
+              Range{" "}
+              <strong>
+                {comparison.comparison.percentile_position_min === null
+                  ? "—"
+                  : `P${comparison.comparison.percentile_position_min.toFixed(1)}`}
+                {" – "}
+                {comparison.comparison.percentile_position_max === null
+                  ? "—"
+                  : `P${comparison.comparison.percentile_position_max.toFixed(1)}`}
+              </strong>
+            </span>
+
+            <span>
+              Method{" "}
+              <strong>
+                {comparison.comparison.percentile_position_method}
+              </strong>
+            </span>
+          </>
+        ) : (
+          <span>
+            {isComparisonLoading
+              ? "Calculating relative position..."
+              : "Relative position not available."}
+          </span>
+        )}
+      </div>
+
+      {comparison && (
+        <WideTemporalPercentilePositionChart
+          comparison={comparison}
+          inspectionIndex={
+            inspectionAxisIndex
+          }
+          inspectionLocked={
+            inspectionLocked
+          }
+          onInspectionHover={
+            handleInspectionHover
+          }
+          onInspectionToggle={
+            handleInspectionToggle
+          }
         />
       )}
 
       <WideTemporalSeriesChart
         detail={detail}
+        inspectionIndex={
+          inspectionAxisIndex
+        }
+        inspectionLocked={
+          inspectionLocked
+        }
+        onInspectionHover={
+          handleInspectionHover
+        }
+        onInspectionToggle={
+          handleInspectionToggle
+        }
       />
 
       <div

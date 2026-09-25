@@ -23,6 +23,9 @@ import type {
 import type {
   WideTemporalReferenceExecution,
 } from "./types/wideTemporalReference";
+import type {
+  WideTemporalReferenceComparisonExecution,
+} from "./types/wideTemporalReferenceComparison";
 
 type FileInfo = {
   name: string;
@@ -459,6 +462,20 @@ function App() {
   const wideTemporalReferencePromiseRef = useRef<
     Promise<WideTemporalReferenceExecution | null> | null
   >(null);
+  const wideTemporalReferenceRequestIdRef =
+    useRef(0);
+  const wideTemporalSourceKeyRef =
+    useRef<string | null>(null);
+  const [
+    wideTemporalReferenceComparison,
+    setWideTemporalReferenceComparison,
+  ] = useState<WideTemporalReferenceComparisonExecution | null>(null);
+  const [
+    isLoadingWideTemporalReferenceComparison,
+    setIsLoadingWideTemporalReferenceComparison,
+  ] = useState(false);
+  const wideTemporalComparisonRequestIdRef =
+    useRef(0);
   const [
     isLoadingWideTemporalSeries,
     setIsLoadingWideTemporalSeries,
@@ -505,6 +522,9 @@ function App() {
   const [activeSection, setActiveSection] =
     useState<ProjectSection>("overview");
 
+  wideTemporalSourceKeyRef.current =
+    fileInfo?.path ?? null;
+
   useEffect(() => {
     const unlistenPromise = listen<ProfileProgress>(
       "profile-progress",
@@ -547,13 +567,20 @@ function App() {
   }, []);
 
   useEffect(() => {
+    wideTemporalReferenceRequestIdRef.current += 1;
+    wideTemporalComparisonRequestIdRef.current += 1;
+
     setWideTemporalSeriesPage(null);
     setWideTemporalSeriesDetail(null);
     setWideTemporalSeriesClassification("");
     setWideTemporalSeriesLoadingIndex(null);
+
     setWideTemporalReference(null);
     setIsLoadingWideTemporalReference(false);
     wideTemporalReferencePromiseRef.current = null;
+
+    setWideTemporalReferenceComparison(null);
+    setIsLoadingWideTemporalReferenceComparison(false);
   }, [fileInfo?.path]);
 
   async function exitApplication() {
@@ -1118,6 +1145,9 @@ function App() {
       return null;
     }
 
+    const sourcePath =
+      fileInfo.path;
+
     const temporalAxisJson =
       buildWideTemporalAxisContext(profile);
 
@@ -1128,6 +1158,9 @@ function App() {
       return null;
     }
 
+    const requestId =
+      ++wideTemporalReferenceRequestIdRef.current;
+
     setIsLoadingWideTemporalReference(true);
 
     const request = (async () => {
@@ -1135,7 +1168,7 @@ function App() {
         const rawResult = await invoke<string>(
           "explore_wide_temporal_reference",
           {
-            path: fileInfo.path,
+            path: sourcePath,
             temporalAxisJson,
           },
         );
@@ -1144,20 +1177,42 @@ function App() {
           rawResult,
         ) as WideTemporalReferenceExecution;
 
+        if (
+          requestId !==
+            wideTemporalReferenceRequestIdRef.current ||
+          wideTemporalSourceKeyRef.current !==
+            sourcePath
+        ) {
+          return null;
+        }
+
         setWideTemporalReference(
           parsedResult,
         );
 
         return parsedResult;
       } catch (err) {
-        setError(String(err));
+        if (
+          requestId ===
+            wideTemporalReferenceRequestIdRef.current &&
+          wideTemporalSourceKeyRef.current ===
+            sourcePath
+        ) {
+          setError(String(err));
+        }
+
         return null;
       } finally {
-        setIsLoadingWideTemporalReference(
-          false,
-        );
-        wideTemporalReferencePromiseRef.current =
-          null;
+        if (
+          requestId ===
+          wideTemporalReferenceRequestIdRef.current
+        ) {
+          setIsLoadingWideTemporalReference(
+            false,
+          );
+          wideTemporalReferencePromiseRef.current =
+            null;
+        }
       }
     })();
 
@@ -1207,6 +1262,8 @@ function App() {
 
       setWideTemporalSeriesPage(parsedResult);
       setWideTemporalSeriesDetail(null);
+      setWideTemporalReferenceComparison(null);
+      wideTemporalComparisonRequestIdRef.current += 1;
 
       void loadWideTemporalReference();
 
@@ -1226,6 +1283,9 @@ function App() {
       return null;
     }
 
+    const sourcePath =
+      fileInfo.path;
+
     const temporalAxisJson =
       buildWideTemporalAxisContext(profile);
 
@@ -1240,45 +1300,124 @@ function App() {
       wideTemporalSeriesDetail?.series_index ===
       seriesIndex
     ) {
+      wideTemporalComparisonRequestIdRef.current += 1;
       setWideTemporalSeriesDetail(null);
+      setWideTemporalReferenceComparison(null);
+      setIsLoadingWideTemporalReferenceComparison(false);
       setWideTemporalSeriesLoadingIndex(null);
       return null;
     }
 
+    const requestId =
+      ++wideTemporalComparisonRequestIdRef.current;
+
     setWideTemporalSeriesDetail(null);
+    setWideTemporalReferenceComparison(null);
+
     setWideTemporalSeriesLoadingIndex(
       seriesIndex,
     );
     setIsLoadingWideTemporalSeries(true);
+    setIsLoadingWideTemporalReferenceComparison(true);
     setError(null);
 
+    let parsedDetail:
+      WideTemporalSeriesDetail | null =
+      null;
+
     try {
-      const rawResult = await invoke<string>(
+      const rawDetail = await invoke<string>(
         "explore_wide_temporal_series_detail",
         {
-          path: fileInfo.path,
+          path: sourcePath,
           temporalAxisJson,
           seriesIndex,
         },
       );
 
-      const parsedResult = JSON.parse(
-        rawResult,
+      parsedDetail = JSON.parse(
+        rawDetail,
       ) as WideTemporalSeriesDetail;
 
-      setWideTemporalSeriesDetail(
-        parsedResult,
-      );
+      if (
+        requestId !==
+          wideTemporalComparisonRequestIdRef.current ||
+        wideTemporalSourceKeyRef.current !==
+          sourcePath
+      ) {
+        return null;
+      }
 
-      return parsedResult;
-    } catch (err) {
-      setError(String(err));
-      return null;
-    } finally {
+      setWideTemporalSeriesDetail(
+        parsedDetail,
+      );
       setWideTemporalSeriesLoadingIndex(
         null,
       );
       setIsLoadingWideTemporalSeries(false);
+
+      const rawComparison =
+        await invoke<string>(
+          "explore_wide_temporal_reference_comparison",
+          {
+            path: sourcePath,
+            temporalAxisJson,
+            seriesIndex,
+          },
+        );
+
+      const parsedComparison =
+        JSON.parse(
+          rawComparison,
+        ) as WideTemporalReferenceComparisonExecution;
+
+      if (
+        requestId !==
+          wideTemporalComparisonRequestIdRef.current ||
+        wideTemporalSourceKeyRef.current !==
+          sourcePath
+      ) {
+        return null;
+      }
+
+      if (
+        parsedComparison.series_index !==
+        seriesIndex
+      ) {
+        throw new Error(
+          "Reference comparison returned a different series index than requested.",
+        );
+      }
+
+      setWideTemporalReferenceComparison(
+        parsedComparison,
+      );
+
+      return parsedDetail;
+    } catch (err) {
+      if (
+        requestId ===
+          wideTemporalComparisonRequestIdRef.current &&
+        wideTemporalSourceKeyRef.current ===
+          sourcePath
+      ) {
+        setError(String(err));
+      }
+
+      return parsedDetail;
+    } finally {
+      if (
+        requestId ===
+        wideTemporalComparisonRequestIdRef.current
+      ) {
+        setWideTemporalSeriesLoadingIndex(
+          null,
+        );
+        setIsLoadingWideTemporalSeries(false);
+        setIsLoadingWideTemporalReferenceComparison(
+          false,
+        );
+      }
     }
   }
 
@@ -2098,9 +2237,22 @@ function App() {
                                                           isReferenceLoading={
                                                             isLoadingWideTemporalReference
                                                           }
+                                                          comparison={
+                                                            wideTemporalReferenceComparison
+                                                          }
+                                                          isComparisonLoading={
+                                                            isLoadingWideTemporalReferenceComparison
+                                                          }
                                                           onClose={() => {
+                                                            wideTemporalComparisonRequestIdRef.current += 1;
                                                             setWideTemporalSeriesDetail(
                                                               null,
+                                                            );
+                                                            setWideTemporalReferenceComparison(
+                                                              null,
+                                                            );
+                                                            setIsLoadingWideTemporalReferenceComparison(
+                                                              false,
                                                             );
                                                           }}
                                                         />

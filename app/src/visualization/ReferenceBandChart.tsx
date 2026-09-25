@@ -253,6 +253,10 @@ export function ReferenceBandChart({
   points,
   title = "Compared with dataset reference",
   ariaLabel = "Selected time series compared with dataset reference percentiles",
+  inspectionIndex,
+  inspectionLocked = false,
+  onInspectionHover,
+  onInspectionToggle,
 }: ReferenceBandChartProps) {
   const width = 720;
   const height = 360;
@@ -472,29 +476,78 @@ export function ReferenceBandChart({
               ),
           );
 
-    setHoverPosition(
+    const boundedPosition =
       Math.max(
         0,
         Math.min(
           pointCount - 1,
           position,
         ),
-      ),
+      );
+
+    setHoverPosition(
+      boundedPosition,
+    );
+
+    onInspectionHover?.(
+      points[
+        boundedPosition
+      ].index,
     );
   };
 
+  const onPointerLeave = () => {
+    setHoverPosition(null);
+    onInspectionHover?.(null);
+  };
+
+  const onClick = () => {
+    if (
+      hoverPosition === null
+    ) {
+      return;
+    }
+
+    onInspectionToggle?.(
+      points[
+        hoverPosition
+      ].index,
+    );
+  };
+
+  const positionByIndex = new Map(
+    points.map(
+      (point, position) => [
+        point.index,
+        position,
+      ],
+    ),
+  );
+
+  const linkedPosition =
+    inspectionIndex === undefined ||
+    inspectionIndex === null
+      ? null
+      : positionByIndex.get(
+          inspectionIndex,
+        ) ?? null;
+
+  const activePosition =
+    linkedPosition ??
+    hoverPosition;
+
   const hoveredPoint =
-    hoverPosition === null
+    activePosition === null
       ? null
       : points[
-          hoverPosition
+          activePosition
         ];
 
   const hoverX =
-    hoverPosition === null
+    activePosition === null
       ? null
       : xForPosition(
-          hoverPosition,
+          activePosition,
         );
 
   const firstPoint =
@@ -545,7 +598,9 @@ export function ReferenceBandChart({
         {hoveredPoint ? (
           <>
             <strong>
-              Inspecting{" "}
+              {inspectionLocked
+                ? "Locked "
+                : "Inspecting "}
               {hoveredPoint.label}
             </strong>
 
@@ -620,9 +675,10 @@ export function ReferenceBandChart({
         onPointerMove={
           onPointerMove
         }
-        onPointerLeave={() =>
-          setHoverPosition(null)
+        onPointerLeave={
+          onPointerLeave
         }
+        onClick={onClick}
         style={{
           width: "100%",
           height: "auto",
@@ -736,7 +792,16 @@ export function ReferenceBandChart({
             }
             stroke="currentColor"
             strokeOpacity={0.55}
-            strokeWidth={1.2}
+            strokeWidth={
+              inspectionLocked
+                ? 2
+                : 1.2
+            }
+            strokeDasharray={
+              inspectionLocked
+                ? undefined
+                : "6 5"
+            }
             vectorEffect="non-scaling-stroke"
           />
         )}
