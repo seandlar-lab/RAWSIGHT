@@ -42,6 +42,14 @@ type SemanticHint = {
   candidate_count: number;
   zero_count: number;
 };
+type ValueEvidence = {
+  kind: string;
+  observed_values: number[];
+  observed_state_count: number;
+  zero_count: number;
+  one_count: number;
+  other_count: number;
+};
 type ColumnInfo = {
   name: string;
   type: string;
@@ -52,6 +60,7 @@ type ColumnInfo = {
   min: string | number | null;
   max: string | number | null;
   semantic_hint: SemanticHint | null;
+  value_evidence?: ValueEvidence | null;
 };
 type RowInspection = {
   filter: {
@@ -72,11 +81,11 @@ type TemporalAxisOrientation = {
 
 type AnalysisStrategyProfile = {
   strategy:
-    | "wide_temporal"
-    | "long_temporal"
-    | "conservative_tabular"
-    | "conservative_unknown"
-    | string;
+  | "wide_temporal"
+  | "long_temporal"
+  | "conservative_tabular"
+  | "conservative_unknown"
+  | string;
   can_use_legacy_profile: boolean;
   reason_codes: string[];
 };
@@ -437,6 +446,8 @@ function App() {
     useState<RawAnalysisColumnResult | null>(null);
   const [rawAnalysisColumnName, setRawAnalysisColumnName] =
     useState("");
+
+  const [showAllDetectedColumns, setShowAllDetectedColumns] = useState(false);
 
   const [temporalTimeColumn, setTemporalTimeColumn] = useState("");
   const [temporalValueColumn, setTemporalValueColumn] = useState("");
@@ -1179,9 +1190,9 @@ function App() {
 
         if (
           requestId !==
-            wideTemporalReferenceRequestIdRef.current ||
+          wideTemporalReferenceRequestIdRef.current ||
           wideTemporalSourceKeyRef.current !==
-            sourcePath
+          sourcePath
         ) {
           return null;
         }
@@ -1194,9 +1205,9 @@ function App() {
       } catch (err) {
         if (
           requestId ===
-            wideTemporalReferenceRequestIdRef.current &&
+          wideTemporalReferenceRequestIdRef.current &&
           wideTemporalSourceKeyRef.current ===
-            sourcePath
+          sourcePath
         ) {
           setError(String(err));
         }
@@ -1341,9 +1352,9 @@ function App() {
 
       if (
         requestId !==
-          wideTemporalComparisonRequestIdRef.current ||
+        wideTemporalComparisonRequestIdRef.current ||
         wideTemporalSourceKeyRef.current !==
-          sourcePath
+        sourcePath
       ) {
         return null;
       }
@@ -1373,9 +1384,9 @@ function App() {
 
       if (
         requestId !==
-          wideTemporalComparisonRequestIdRef.current ||
+        wideTemporalComparisonRequestIdRef.current ||
         wideTemporalSourceKeyRef.current !==
-          sourcePath
+        sourcePath
       ) {
         return null;
       }
@@ -1397,9 +1408,9 @@ function App() {
     } catch (err) {
       if (
         requestId ===
-          wideTemporalComparisonRequestIdRef.current &&
+        wideTemporalComparisonRequestIdRef.current &&
         wideTemporalSourceKeyRef.current ===
-          sourcePath
+        sourcePath
       ) {
         setError(String(err));
       }
@@ -1943,12 +1954,12 @@ function App() {
 
                         const detectedTemporalColumnName =
                           detectedTemporalAxis?.orientation === "vertical" &&
-                          Number.isInteger(
-                            detectedTemporalAxis.sequence_index,
-                          )
+                            Number.isInteger(
+                              detectedTemporalAxis.sequence_index,
+                            )
                             ? columns[
-                                detectedTemporalAxis.sequence_index
-                              ]?.name ?? ""
+                              detectedTemporalAxis.sequence_index
+                            ]?.name ?? ""
                             : "";
 
                         const selectedTemporalTimeColumn =
@@ -2133,7 +2144,7 @@ function App() {
                                         </span>
 
                                         {wideTemporalSeriesPage.series.length ===
-                                        0 ? (
+                                          0 ? (
                                           <span>
                                             No series matched this observation
                                             classification.
@@ -2275,14 +2286,14 @@ function App() {
                                             disabled={
                                               isLoadingWideTemporalSeries ||
                                               wideTemporalSeriesPage.offset ===
-                                                0
+                                              0
                                             }
                                             onClick={() => {
                                               void loadWideTemporalSeriesPage(
                                                 Math.max(
                                                   0,
                                                   wideTemporalSeriesPage.offset -
-                                                    wideTemporalSeriesPage.limit,
+                                                  wideTemporalSeriesPage.limit,
                                                 ),
                                               );
                                             }}
@@ -2296,7 +2307,7 @@ function App() {
                                               isLoadingWideTemporalSeries ||
                                               !wideTemporalSeriesPage.has_more ||
                                               wideTemporalSeriesPage.next_offset ===
-                                                null
+                                              null
                                             }
                                             onClick={() => {
                                               if (
@@ -2567,52 +2578,52 @@ function App() {
 
                                         {temporalAnalysisResult.gaps.gaps
                                           .length > 0 && (
-                                          <>
-                                            <h4>Detected gaps</h4>
+                                            <>
+                                              <h4>Detected gaps</h4>
 
-                                            <table className="temporal-gap-table">
-                                              <thead>
-                                                <tr>
-                                                  <th>From</th>
-                                                  <th>To</th>
-                                                  <th>Duration</th>
-                                                  <th>× median</th>
-                                                </tr>
-                                              </thead>
+                                              <table className="temporal-gap-table">
+                                                <thead>
+                                                  <tr>
+                                                    <th>From</th>
+                                                    <th>To</th>
+                                                    <th>Duration</th>
+                                                    <th>× median</th>
+                                                  </tr>
+                                                </thead>
 
-                                              <tbody>
-                                                {temporalAnalysisResult.gaps.gaps.map(
-                                                  (gap) => (
-                                                    <tr
-                                                      key={`${gap.from}-${gap.to}`}
-                                                    >
-                                                      <td>
-                                                        {formatTemporalTimestamp(
-                                                          gap.from,
-                                                        )}
-                                                      </td>
-                                                      <td>
-                                                        {formatTemporalTimestamp(
-                                                          gap.to,
-                                                        )}
-                                                      </td>
-                                                      <td>
-                                                        {formatDurationSeconds(
-                                                          gap.interval_seconds,
-                                                        )}
-                                                      </td>
-                                                      <td>
-                                                        {
-                                                          gap.multiple_of_median
-                                                        }
-                                                      </td>
-                                                    </tr>
-                                                  ),
-                                                )}
-                                              </tbody>
-                                            </table>
-                                          </>
-                                        )}
+                                                <tbody>
+                                                  {temporalAnalysisResult.gaps.gaps.map(
+                                                    (gap) => (
+                                                      <tr
+                                                        key={`${gap.from}-${gap.to}`}
+                                                      >
+                                                        <td>
+                                                          {formatTemporalTimestamp(
+                                                            gap.from,
+                                                          )}
+                                                        </td>
+                                                        <td>
+                                                          {formatTemporalTimestamp(
+                                                            gap.to,
+                                                          )}
+                                                        </td>
+                                                        <td>
+                                                          {formatDurationSeconds(
+                                                            gap.interval_seconds,
+                                                          )}
+                                                        </td>
+                                                        <td>
+                                                          {
+                                                            gap.multiple_of_median
+                                                          }
+                                                        </td>
+                                                      </tr>
+                                                    ),
+                                                  )}
+                                                </tbody>
+                                              </table>
+                                            </>
+                                          )}
 
                                         <details>
                                           <summary>Raw JSON</summary>
@@ -2665,7 +2676,7 @@ function App() {
 
                             {(strategy === "conservative_tabular" &&
                               orientation !== "ambiguous") ||
-                            strategy === "conservative_unknown" ? (
+                              strategy === "conservative_unknown" ? (
                               <div className="analysis-group">
                                 <div className="analysis-group-header">
                                   <strong>Column Explorer</strong>
@@ -3439,25 +3450,25 @@ function App() {
 
                               {profile.wide_temporal.value_analysis.series_classification
                                 .insufficient_adjacent_observations > 0 && (
-                                <span>
-                                  Insufficient adjacent observations{" "}
-                                  <strong>
-                                    {profile.wide_temporal.value_analysis.series_classification
-                                      .insufficient_adjacent_observations.toLocaleString()}
-                                  </strong>
-                                </span>
-                              )}
+                                  <span>
+                                    Insufficient adjacent observations{" "}
+                                    <strong>
+                                      {profile.wide_temporal.value_analysis.series_classification
+                                        .insufficient_adjacent_observations.toLocaleString()}
+                                    </strong>
+                                  </span>
+                                )}
 
                               {profile.wide_temporal.value_analysis.series_classification
                                 .no_numeric_data > 0 && (
-                                <span>
-                                  No numeric observations{" "}
-                                  <strong>
-                                    {profile.wide_temporal.value_analysis.series_classification
-                                      .no_numeric_data.toLocaleString()}
-                                  </strong>
-                                </span>
-                              )}
+                                  <span>
+                                    No numeric observations{" "}
+                                    <strong>
+                                      {profile.wide_temporal.value_analysis.series_classification
+                                        .no_numeric_data.toLocaleString()}
+                                    </strong>
+                                  </span>
+                                )}
                             </div>
                           </div>
 
@@ -3623,115 +3634,163 @@ function App() {
                         <span>{profile.column_count} columns</span>
                       </div>
 
-                      {profile.columns.slice(0, 8).map((column) => (
-                        <div className="column-profile" key={column.name}>
-                          <div className="column-profile-title">
-                            <span>{column.name}</span>
-                            <code>{column.type}</code>
-                          </div>
+                      {profile.columns
+                        .slice(
+                          0,
+                          showAllDetectedColumns
+                            ? profile.columns.length
+                            : 8,
+                        )
+                        .map((column) => (
+                          <div className="column-profile" key={column.name}>
+                            <div className="column-profile-title">
+                              <span>{column.name}</span>
+                              <code>{column.type}</code>
+                            </div>
 
-                          <div className="column-metrics">
-                            <span>
-                              Missing{" "}
-                              <strong>
-                                {column.null_count === null
-                                  ? "Not evaluated"
-                                  : column.null_count.toLocaleString()}
-                              </strong>
-                            </span>
-
-                            <span>
-                              Distinct{" "}
-                              <strong>
-                                {column.distinct_count === null
-                                  ? "Not evaluated"
-                                  : column.distinct_count.toLocaleString()}
-                              </strong>
-                            </span>
-
-                            <span>
-                              Cardinality{" "}
-                              <strong>
-                                {column.unique_percent === null
-                                  ? "Not evaluated"
-                                  : `${column.unique_percent.toFixed(1)}%`}
-                              </strong>
-                            </span>
-
-                            {column.min !== null && (
+                            <div className="column-metrics">
                               <span>
-                                Min{" "}
+                                Missing{" "}
                                 <strong>
-                                  {formatProfileValue(column.min)}
+                                  {column.null_count === null
+                                    ? "Not evaluated"
+                                    : column.null_count.toLocaleString()}
                                 </strong>
                               </span>
-                            )}
 
-                            {column.max !== null && (
                               <span>
-                                Max{" "}
+                                Distinct{" "}
                                 <strong>
-                                  {formatProfileValue(column.max)}
+                                  {column.distinct_count === null
+                                    ? "Not evaluated"
+                                    : column.distinct_count.toLocaleString()}
                                 </strong>
                               </span>
-                            )}
-                          </div>
 
-                          <div className="column-signals">
-                            {getColumnSignals(column, profile.rows).map(
-                              (signal) => (
-                                <span
-                                  className="column-signal"
-                                  key={signal}
-                                >
-                                  {signal}
-                                </span>
-                              ),
-                            )}
-                          </div>
-
-                          {column.semantic_hint && (
-                            <div className="semantic-hint">
-                              <div>
+                              <span>
+                                Cardinality{" "}
                                 <strong>
-                                  Possible{" "}
-                                  {column.semantic_hint.suggested_type}
+                                  {column.unique_percent === null
+                                    ? "Not evaluated"
+                                    : `${column.unique_percent.toFixed(1)}%`}
                                 </strong>
+                              </span>
 
+                              {column.min !== null && (
                                 <span>
-                                  {column.semantic_hint.format} ·{" "}
-                                  {column.semantic_hint.confidence.toFixed(1)}%
-                                  {" "}pattern match
+                                  Min{" "}
+                                  <strong>
+                                    {formatProfileValue(column.min)}
+                                  </strong>
                                 </span>
-                              </div>
+                              )}
 
-                              {column.semantic_hint.zero_count > 0 && (
-                                <div className="semantic-actions">
-                                  <span className="semantic-warning">
-                                    {column.semantic_hint.zero_count.toLocaleString()}
-                                    {" "}zero values
-                                  </span>
-
-                                  <button
-                                    type="button"
-                                    onClick={() => inspectZeroRows(column)}
-                                    disabled={isInspecting}
-                                  >
-                                    {isInspecting
-                                      ? "Loading..."
-                                      : "Show rows"}
-                                  </button>
-                                </div>
+                              {column.max !== null && (
+                                <span>
+                                  Max{" "}
+                                  <strong>
+                                    {formatProfileValue(column.max)}
+                                  </strong>
+                                </span>
                               )}
                             </div>
-                          )}
-                        </div>
-                      ))}
+
+                            {column.value_evidence?.kind === "binary_compatible_numeric" && (
+                              <>
+                                <div className="column-signals">
+                                  <span className="column-signal">
+                                    Binary-valued numeric
+                                  </span>
+                                </div>
+
+                                <div className="column-metrics">
+                                  <span>
+                                    Observed{" "}
+                                    <strong>
+                                      {column.value_evidence.observed_values.join(", ")}
+                                    </strong>
+                                  </span>
+
+                                  <span>
+                                    0{" "}
+                                    <strong>
+                                      {column.value_evidence.zero_count.toLocaleString()}
+                                    </strong>
+                                  </span>
+
+                                  <span>
+                                    1{" "}
+                                    <strong>
+                                      {column.value_evidence.one_count.toLocaleString()}
+                                    </strong>
+                                  </span>
+                                </div>
+                              </>
+                            )}
+
+                            <div className="column-signals">
+                              {getColumnSignals(column, profile.rows).map(
+                                (signal) => (
+                                  <span
+                                    className="column-signal"
+                                    key={signal}
+                                  >
+                                    {signal}
+                                  </span>
+                                ),
+                              )}
+                            </div>
+
+                            {column.semantic_hint && (
+                              <div className="semantic-hint">
+                                <div>
+                                  <strong>
+                                    Possible{" "}
+                                    {column.semantic_hint.suggested_type}
+                                  </strong>
+
+                                  <span>
+                                    {column.semantic_hint.format} ·{" "}
+                                    {column.semantic_hint.confidence.toFixed(1)}%
+                                    {" "}pattern match
+                                  </span>
+                                </div>
+
+                                {column.semantic_hint.zero_count > 0 && (
+                                  <div className="semantic-actions">
+                                    <span className="semantic-warning">
+                                      {column.semantic_hint.zero_count.toLocaleString()}
+                                      {" "}zero values
+                                    </span>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => inspectZeroRows(column)}
+                                      disabled={isInspecting}
+                                    >
+                                      {isInspecting
+                                        ? "Loading..."
+                                        : "Show rows"}
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        ))}
 
                       {profile.columns.length > 8 && (
-                        <div className="more-columns">
-                          + {profile.columns.length - 8} more columns
-                        </div>
+                        <button
+                          type="button"
+                          className="more-columns"
+                          onClick={() =>
+                            setShowAllDetectedColumns((current) => !current)
+                          }
+                        >
+                          {showAllDetectedColumns
+                            ? "Show less"
+                            : `+ ${profile.columns.length - 8} more columns`}
+                        </button>
                       )}
                     </div>
                   </div>

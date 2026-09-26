@@ -133,6 +133,27 @@ def build_analysis_status(
         "reason": reason,
     }
 
+def is_numeric_type(
+    data_type: str,
+) -> bool:
+    type_upper = data_type.upper()
+
+    return any(
+        type_upper.startswith(prefix)
+        for prefix in NUMERIC_TYPES
+    )
+
+
+def is_temporal_type(
+    data_type: str,
+) -> bool:
+    type_upper = data_type.upper()
+
+    return any(
+        type_upper.startswith(prefix)
+        for prefix in TEMPORAL_TYPES
+    )
+
 def profile_conservative_dataset(
     file_path: str,
     inspection: dict,
@@ -236,6 +257,437 @@ def profile_conservative_dataset(
         ),
     }
 
+def profile_long_temporal_safe(
+    file_path: str,
+    inspection: dict,
+    analysis_strategy: dict,
+    source_context: (
+        SourceExecutionContext | None
+    ) = None,
+) -> dict:
+    """
+    Produce a bounded profile for a long temporal dataset.
+
+    The source is scanned through aggregate expressions only.
+    No full-row DISTINCT, ordering, or source materialization
+    is performed here.
+
+    Numeric columns are also checked for evidence that their
+    observed non-null values are confined to {0, 1}. This is
+    structural/value evidence only; no domain meaning such as
+    switch, flag, or state is inferred.
+    """
+
+    path = Path(file_path)
+
+    if source_context is None:
+        progress(
+            "Opening long temporal dataset safely"
+        )
+
+        with SourceExecutionContext(
+            file_path
+        ) as owned_context:
+            return profile_long_temporal_safe(
+                file_path=file_path,
+                inspection=inspection,
+                analysis_strategy=analysis_strategy,
+                source_context=owned_context,
+            )
+
+    source_context.assert_source(
+        file_path
+    )
+
+    if not source_context.is_open:
+        raise RuntimeError(
+            "Supplied SourceExecutionContext "
+            "must already be open"
+        )
+
+    connection = (
+        source_context.require_connection()
+    )
+
+    column_names = (
+        source_context.column_names
+    )
+
+    column_types = (
+        source_context.column_types
+    )
+
+    progress(
+        "Profiling long temporal columns"
+    )
+
+    expressions = [
+        "COUNT(*) AS row_count"
+    ]
+
+    for index, (
+        name,
+        data_type,
+    ) in enumerate(
+        zip(
+            column_names,
+            column_types,
+        )
+    ):
+        column = quote_identifier(
+            name
+        )
+
+        expressions.append(
+            f"""
+            COUNT(*) FILTER (
+                WHERE {column} IS NULL
+            ) AS c{index}_nulls
+            """
+        )
+
+        if (
+            is_numeric_type(data_type)
+            or is_temporal_type(data_type)
+        ):
+            expressions.append(
+                f"MIN({column}) AS c{index}_min"
+            )
+            expressions.append(
+                f"MAX({column}) AS c{index}_max"
+            )
+        else:
+            expressions.append(
+                f"NULL AS c{index}_min"
+            )
+            expressions.append(
+                f"NULL AS c{index}_max"
+            )
+
+        if is_numeric_type(
+            data_type
+        ):
+            expressions.append(
+                f"""
+                COUNT(*) FILTER (
+                    WHERE {column} = 0
+                ) AS c{index}_zero
+                """
+            )
+
+            expressions.append(
+                f"""
+                COUNT(*) FILTER (
+                    WHERE {column} = 1
+                ) AS c{index}_one
+                """
+            )
+
+            expressions.append(
+                f"""
+                COUNT(*) FILTER (
+                    WHERE {column} IS NOT NULL
+                      AND {column} NOT IN (0, 1)
+                ) AS c{index}_other
+                """
+            )
+
+    aggregate_sql = (
+        "SELECT "
+        + ", ".join(expressions)
+        + " FROM rawsight_source"
+    )
+
+    aggregate_row = (
+        connection.execute(
+            aggregate_sql
+        ).fetchone()
+    )
+
+    row_count = aggregate_row[0]
+
+    result_position = 1
+
+    columns = []
+    total_missing = 0
+
+    for (
+        name,
+        data_type,
+    ) in zip(
+        column_names,
+        column_types,
+    ):
+        null_count = (
+            aggregate_row[
+                result_position
+            ]
+        )
+
+        minimum = (
+            aggregate_row[
+                result_position + 1
+            ]
+        )
+
+        maximum = (
+            aggregate_row[
+                result_position + 2
+            ]
+        )
+
+        result_position += 3
+
+        total_missing += (
+            null_count
+        )
+
+        non_null_count = (
+            row_count
+            - null_count
+        )
+
+        null_percent = (
+            null_count
+            / row_count
+            * 100
+            if row_count
+            else 0.0
+        )
+
+        binary_evidence = None
+
+        if is_numeric_type(
+            data_type
+        ):
+            zero_count = (
+                aggregate_row[
+                    result_position
+                ]
+            )
+
+            one_count = (
+                aggregate_row[
+                    result_position + 1
+                ]
+            )
+
+            other_count = (
+                aggregate_row[
+                    result_position + 2
+                ]
+            )
+
+            result_position += 3
+
+            if (
+                non_null_count > 0
+                and other_count == 0
+            ):
+                observed_values = []
+
+                if zero_count > 0:
+                    observed_values.append(
+                        0
+                    )
+
+                if one_count > 0:
+                    observed_values.append(
+                        1
+                    )
+
+                binary_evidence = {
+                    "kind": (
+                        "binary_compatible_numeric"
+                    ),
+                    "observed_values": (
+                        observed_values
+                    ),
+                    "observed_state_count": (
+                        len(observed_values)
+                    ),
+                    "zero_count": zero_count,
+                    "one_count": one_count,
+                    "other_count": (
+                        other_count
+                    ),
+                }
+
+        columns.append({
+            "name": name,
+            "type": data_type,
+
+            "null_count": (
+                null_count
+            ),
+            "null_percent": round(
+                null_percent,
+                4,
+            ),
+
+            # Expensive generic cardinality is
+            # deliberately not evaluated here.
+            "distinct_count": None,
+            "unique_percent": None,
+
+            "min": json_safe(
+                minimum
+            ),
+            "max": json_safe(
+                maximum
+            ),
+
+            "semantic_hint": None,
+
+            "value_evidence": (
+                binary_evidence
+            ),
+        })
+
+    total_cells = (
+        row_count
+        * len(columns)
+    )
+
+    missing_percent = (
+        total_missing
+        / total_cells
+        * 100
+        if total_cells
+        else 0.0
+    )
+
+    structural_model = (
+        inspection.get(
+            "structural_model",
+            {},
+        )
+    )
+
+    logical_structure = (
+        structural_model.get(
+            "logical_structure",
+            {},
+        )
+    )
+
+    temporal_axis = (
+        logical_structure.get(
+            "temporal_axis"
+        )
+    )
+
+    temporal_column_index = None
+    temporal_column_name = None
+    range_start = None
+    range_end = None
+
+    if (
+        isinstance(
+            temporal_axis,
+            dict,
+        )
+        and temporal_axis.get(
+            "orientation"
+        ) == "vertical"
+    ):
+        candidate_index = (
+            temporal_axis.get(
+                "sequence_index"
+            )
+        )
+
+        if (
+            isinstance(
+                candidate_index,
+                int,
+            )
+            and 0 <= candidate_index
+            < len(columns)
+        ):
+            temporal_column_index = (
+                candidate_index
+            )
+
+            temporal_column = (
+                columns[
+                    candidate_index
+                ]
+            )
+
+            temporal_column_name = (
+                temporal_column[
+                    "name"
+                ]
+            )
+
+            range_start = (
+                temporal_column[
+                    "min"
+                ]
+            )
+
+            range_end = (
+                temporal_column[
+                    "max"
+                ]
+            )
+
+    progress(
+        "Preparing long temporal overview"
+    )
+
+    return {
+        "file": path.name,
+        "rows": row_count,
+        "column_count": len(
+            columns
+        ),
+
+        "duplicate_rows": None,
+        "duplicate_percent": None,
+
+        "missing_values": (
+            total_missing
+        ),
+        "missing_percent": round(
+            missing_percent,
+            4,
+        ),
+
+        "columns": columns,
+
+        "analysis_strategy": (
+            analysis_strategy
+        ),
+
+        "structural_model": (
+            structural_model
+        ),
+
+        "long_temporal": {
+            "status": "candidate",
+            "axis_orientation": (
+                "vertical"
+                if temporal_column_index
+                is not None
+                else None
+            ),
+            "temporal_column_index": (
+                temporal_column_index
+            ),
+            "temporal_column_name": (
+                temporal_column_name
+            ),
+            "range_start": (
+                range_start
+            ),
+            "range_end": (
+                range_end
+            ),
+        },
+    }
+
 def profile_dataset(file_path: str) -> dict:
     """
     Route dataset analysis according to detected structural
@@ -298,11 +750,11 @@ def profile_dataset(file_path: str) -> dict:
             )
 
         if strategy == "long_temporal":
-            return profile_conservative_dataset(
-                file_path=file_path,
-                inspection=inspection,
-                analysis_strategy=analysis_strategy,
-                source_context=source_context,
+             return profile_long_temporal_safe(
+            file_path=file_path,
+            inspection=inspection,
+             analysis_strategy=analysis_strategy,
+            source_context=source_context,
             )
 
         if strategy == "conservative_tabular":
