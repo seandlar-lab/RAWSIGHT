@@ -14,6 +14,9 @@ from rawsight.source_context import (
 from rawsight.wide_temporal_execution import (
     execute_wide_temporal_analysis,
 )
+from rawsight.long_temporal_execution import (
+    execute_long_temporal_axis_analysis,
+)
 
 NUMERIC_TYPES = (
     "TINYINT",
@@ -268,14 +271,24 @@ def profile_long_temporal_safe(
     """
     Produce a bounded profile for a long temporal dataset.
 
-    The source is scanned through aggregate expressions only.
-    No full-row DISTINCT, ordering, or source materialization
-    is performed here.
+    Column-level structural/value evidence is collected through
+    aggregate expressions.
 
-    Numeric columns are also checked for evidence that their
-    observed non-null values are confined to {0, 1}. This is
-    structural/value evidence only; no domain meaning such as
-    switch, flag, or state is inferred.
+    The detected temporal axis is then analyzed as a streamed
+    sequence through the same open SourceExecutionContext.
+
+    No full-row DISTINCT, source materialization, or temporal
+    sorting is performed here.
+
+    Numeric columns are checked for evidence that their observed
+    non-null values are confined to {0, 1}. This is value evidence
+    only; no domain meaning such as switch, flag, state, sensor,
+    or status is inferred.
+
+    Temporal continuity describes observed ordering and adjacent
+    positive intervals. Large intervals are retained as evidence
+    only and are not automatically classified as gaps, errors,
+    interruptions, or anomalies.
     """
 
     path = Path(file_path)
@@ -353,13 +366,16 @@ def profile_long_temporal_safe(
             expressions.append(
                 f"MIN({column}) AS c{index}_min"
             )
+
             expressions.append(
                 f"MAX({column}) AS c{index}_max"
             )
+
         else:
             expressions.append(
                 f"NULL AS c{index}_min"
             )
+
             expressions.append(
                 f"NULL AS c{index}_max"
             )
@@ -525,8 +541,8 @@ def profile_long_temporal_safe(
                 4,
             ),
 
-            # Expensive generic cardinality is
-            # deliberately not evaluated here.
+            # Expensive generic cardinality is deliberately
+            # not evaluated by this analysis strategy.
             "distinct_count": None,
             "unique_percent": None,
 
@@ -579,8 +595,12 @@ def profile_long_temporal_safe(
 
     temporal_column_index = None
     temporal_column_name = None
+
     range_start = None
     range_end = None
+
+    temporal_continuity = None
+    temporal_execution = None
 
     if (
         isinstance(
@@ -633,6 +653,65 @@ def profile_long_temporal_safe(
                 ]
             )
 
+            progress(
+                "Analyzing temporal continuity"
+            )
+
+            # These are execution/output bounds, not analytical
+            # thresholds and not dataset acceptance criteria.
+            interval_frequency_limit = 10000
+            largest_positive_interval_limit = 10
+
+            temporal_result = (
+                execute_long_temporal_axis_analysis(
+                    file_path=file_path,
+                    temporal_axis=temporal_axis,
+                    source_context=source_context,
+                    interval_frequency_limit=(
+                        interval_frequency_limit
+                    ),
+                    largest_positive_interval_limit=(
+                        largest_positive_interval_limit
+                    ),
+                )
+            )
+
+            temporal_continuity = (
+                temporal_result[
+                    "analysis"
+                ]
+            )
+
+            temporal_execution = {
+                "mode": temporal_result.get(
+                    "mode"
+                ),
+                "observed_order_basis": (
+                    temporal_result.get(
+                        "observed_order_basis"
+                    )
+                ),
+                "canonical_order_established": (
+                    temporal_result.get(
+                        "canonical_order_established"
+                    )
+                ),
+                "limitations": (
+                    temporal_result.get(
+                        "limitations",
+                        [],
+                    )
+                ),
+                "execution_limits": {
+                    "interval_frequency_limit": (
+                        interval_frequency_limit
+                    ),
+                    "largest_positive_interval_limit": (
+                        largest_positive_interval_limit
+                    ),
+                },
+            }
+
     progress(
         "Preparing long temporal overview"
     )
@@ -667,23 +746,36 @@ def profile_long_temporal_safe(
 
         "long_temporal": {
             "status": "candidate",
+
             "axis_orientation": (
                 "vertical"
                 if temporal_column_index
                 is not None
                 else None
             ),
+
             "temporal_column_index": (
                 temporal_column_index
             ),
+
             "temporal_column_name": (
                 temporal_column_name
             ),
+
             "range_start": (
                 range_start
             ),
+
             "range_end": (
                 range_end
+            ),
+
+            "continuity": (
+                temporal_continuity
+            ),
+
+            "execution": (
+                temporal_execution
             ),
         },
     }
