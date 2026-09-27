@@ -1,6 +1,7 @@
 from collections import Counter
 from datetime import date, datetime, time
 from typing import Iterable
+from heapq import heappush, heapreplace
 
 
 def _normalize_temporal_value(
@@ -69,6 +70,7 @@ def analyze_long_temporal_axis(
     values: Iterable[object],
     *,
     interval_frequency_limit: int | None = None,
+    largest_positive_interval_limit: int = 0,
 ) -> dict:
     """
     Analyze one normalized temporal sequence in observed order.
@@ -94,6 +96,12 @@ def analyze_long_temporal_axis(
             "interval_frequency_limit must be positive or None"
         )
 
+    if largest_positive_interval_limit < 0:
+        raise ValueError(
+            "largest_positive_interval_limit "
+            "must be zero or positive"
+        )
+
     value_count = 0
     temporal_value_count = 0
     missing_count = 0
@@ -113,7 +121,13 @@ def analyze_long_temporal_axis(
 
     # Adjacency is different from ordering. A missing temporal
     # value breaks the adjacent sampling relationship.
+    
     previous_adjacent = None
+    previous_adjacent_index = None
+
+    # Bounded evidence only. These are observations, not
+    # automatically gaps, interruptions, or anomalies.
+    largest_positive_intervals = []
 
     adjacent_delta_count = 0
 
@@ -133,6 +147,8 @@ def analyze_long_temporal_axis(
     for raw_value in values:
         value_count += 1
 
+        current_index = value_count - 1
+
         value = _normalize_temporal_value(
             raw_value
         )
@@ -142,6 +158,7 @@ def analyze_long_temporal_axis(
 
             # Do not create an artificial interval across a
             # missing temporal position.
+            previous_adjacent_index = None
             previous_adjacent = None
             continue
 
@@ -209,6 +226,37 @@ def analyze_long_temporal_axis(
                 positive_adjacent_intervals += 1
 
                 if (
+                    largest_positive_interval_limit > 0
+                    and previous_adjacent_index is not None
+                ):
+                    candidate = (
+                        delta_seconds,
+                        -previous_adjacent_index,
+                        previous_adjacent_index,
+                        current_index,
+                        previous_adjacent,
+                        value,
+                    )
+
+                    if (
+                        len(largest_positive_intervals)
+                        < largest_positive_interval_limit
+                    ):
+                        heappush(
+                            largest_positive_intervals,
+                            candidate,
+                        )
+
+                    elif (
+                        candidate[:2]
+                        > largest_positive_intervals[0][:2]
+                    ):
+                        heapreplace(
+                            largest_positive_intervals,
+                            candidate,
+                        )
+
+                if (
                     min_positive_interval_seconds is None
                     or delta_seconds
                     < min_positive_interval_seconds
@@ -257,6 +305,7 @@ def analyze_long_temporal_axis(
                 negative_adjacent_deltas += 1
 
         previous_adjacent = value
+        previous_adjacent_index = current_index
 
     observed_order = _classify_order(
         positive_observed_transitions,
@@ -284,6 +333,45 @@ def analyze_long_temporal_axis(
                 dominant_positive_interval_count
                 / positive_adjacent_intervals
             )
+    
+        retained_largest_intervals = []
+
+    for (
+        interval_seconds,
+        _,
+        from_index,
+        to_index,
+        from_value,
+        to_value,
+    ) in sorted(
+        largest_positive_intervals,
+        key=lambda item: (
+            -item[0],
+            item[2],
+        ),
+    ):
+        interval_multiple = None
+
+        if (
+            dominant_positive_interval_seconds
+            is not None
+            and dominant_positive_interval_seconds > 0
+        ):
+            interval_multiple = (
+                interval_seconds
+                / dominant_positive_interval_seconds
+            )
+
+        retained_largest_intervals.append({
+            "from_index": from_index,
+            "to_index": to_index,
+            "from_value": from_value.isoformat(),
+            "to_value": to_value.isoformat(),
+            "interval_seconds": interval_seconds,
+            "multiple_of_dominant_interval": (
+                interval_multiple
+            ),
+        })
 
     return {
         "value_count": value_count,
@@ -366,5 +454,14 @@ def analyze_long_temporal_axis(
             len(positive_interval_counts)
             if interval_frequency_complete
             else None
+        ),
+         "largest_positive_interval_limit": (
+            largest_positive_interval_limit
+        ),
+        "largest_positive_interval_count": (
+            len(retained_largest_intervals)
+        ),
+        "largest_positive_intervals": (
+            retained_largest_intervals
         ),
     }

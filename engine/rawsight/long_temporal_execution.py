@@ -64,6 +64,7 @@ def execute_long_temporal_axis_analysis(
     ) = None,
     batch_size: int = 65536,
     interval_frequency_limit: int | None = None,
+    largest_positive_interval_limit: int = 10,
 ) -> dict:
     """
     Execute streaming analysis of one detected vertical
@@ -112,16 +113,18 @@ def execute_long_temporal_axis_analysis(
                 interval_frequency_limit=(
                     interval_frequency_limit
                 ),
+                largest_positive_interval_limit=(
+                    largest_positive_interval_limit
+                ),
             )
-
     source_context.assert_source(
         file_path
     )
 
     if not source_context.is_open:
         raise RuntimeError(
-            "Supplied SourceExecutionContext "
-            "must already be open"
+        "Supplied SourceExecutionContext "
+        "must already be open"
         )
 
     column_names = (
@@ -158,6 +161,9 @@ def execute_long_temporal_axis_analysis(
         values,
         interval_frequency_limit=(
             interval_frequency_limit
+        ),
+        largest_positive_interval_limit=(
+            largest_positive_interval_limit
         ),
     )
 
