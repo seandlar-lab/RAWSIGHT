@@ -123,6 +123,7 @@ type DatasetProfile = {
   analysis_strategy?: AnalysisStrategyProfile;
   structural_model?: StructuralModelProfile;
   wide_temporal?: WideTemporalProfile;
+  long_temporal?: LongTemporalProfile;
 };
 
 type WideTemporalSeriesClassification = {
@@ -190,6 +191,81 @@ type WideTemporalProfile = {
 
   value_analysis?: WideTemporalValueAnalysis;
   value_analysis_execution?: WideTemporalValueExecution;
+};
+
+type LongTemporalLargestPositiveInterval = {
+  from_index: number;
+  to_index: number;
+  from_value: string;
+  to_value: string;
+  interval_seconds: number;
+  multiple_of_dominant_interval: number | null;
+};
+
+type LongTemporalContinuity = {
+  value_count: number;
+  temporal_value_count: number;
+  missing_count: number;
+
+  first_value: string | null;
+  last_value: string | null;
+  range_start: string | null;
+  range_end: string | null;
+
+  observed_order: string | null;
+
+  positive_observed_transitions: number;
+  zero_observed_transitions: number;
+  negative_observed_transitions: number;
+
+  adjacent_delta_count: number;
+
+  positive_adjacent_intervals: number;
+  zero_adjacent_deltas: number;
+  negative_adjacent_deltas: number;
+
+  min_observed_delta_seconds: number | null;
+  max_observed_delta_seconds: number | null;
+
+  min_positive_interval_seconds: number | null;
+  max_positive_interval_seconds: number | null;
+
+  dominant_positive_interval_seconds: number | null;
+  dominant_positive_interval_count: number;
+  positive_interval_consistency: number | null;
+
+  interval_frequency_complete: boolean;
+  distinct_positive_interval_count: number | null;
+
+  largest_positive_interval_limit: number;
+  largest_positive_interval_count: number;
+  largest_positive_intervals: LongTemporalLargestPositiveInterval[];
+};
+
+type LongTemporalExecution = {
+  mode: string | null;
+  observed_order_basis: string | null;
+  canonical_order_established: boolean | null;
+  limitations: string[];
+
+  execution_limits: {
+    interval_frequency_limit: number;
+    largest_positive_interval_limit: number;
+  };
+};
+
+type LongTemporalProfile = {
+  status: string;
+  axis_orientation: string | null;
+
+  temporal_column_index: number | null;
+  temporal_column_name: string | null;
+
+  range_start: string | null;
+  range_end: string | null;
+
+  continuity?: LongTemporalContinuity | null;
+  execution?: LongTemporalExecution | null;
 };
 
 const WIDE_TEMPORAL_SERIES_PAGE_SIZE = 10;
@@ -2330,6 +2406,133 @@ function App() {
 
                               </>
                             )}
+
+                            {strategy === "long_temporal" &&
+                              profile.long_temporal?.continuity && (
+                                <div className="analysis-group">
+                                  <div className="analysis-group-header">
+                                    <strong>Temporal continuity</strong>
+                                    <span>Observed sequence</span>
+                                  </div>
+
+                                  <div className="analysis-group-content">
+                                    <span>
+                                      Time field{" "}
+                                      <strong>
+                                        {profile.long_temporal.temporal_column_name ??
+                                          "Unknown"}
+                                      </strong>
+                                    </span>
+
+                                    <span>
+                                      Observed order{" "}
+                                      <strong>
+                                        {profile.long_temporal.continuity.observed_order ??
+                                          "Not established"}
+                                      </strong>
+                                    </span>
+
+                                    <span>
+                                      Dominant positive interval{" "}
+                                      <strong>
+                                        {profile.long_temporal.continuity
+                                          .dominant_positive_interval_seconds !== null
+                                          ? `${profile.long_temporal.continuity
+                                            .dominant_positive_interval_seconds.toLocaleString()} s`
+                                          : "Not established"}
+                                      </strong>
+                                    </span>
+
+                                    <span>
+                                      Share at dominant interval{" "}
+                                      <strong>
+                                        {profile.long_temporal.continuity
+                                          .positive_interval_consistency !== null
+                                          ? `${(
+                                            profile.long_temporal.continuity
+                                              .positive_interval_consistency * 100
+                                          ).toFixed(1)}%`
+                                          : "Not evaluated"}
+                                      </strong>
+                                    </span>
+
+                                    <span>
+                                      Distinct positive intervals{" "}
+                                      <strong>
+                                        {profile.long_temporal.continuity
+                                          .distinct_positive_interval_count !== null
+                                          ? profile.long_temporal.continuity
+                                            .distinct_positive_interval_count.toLocaleString()
+                                          : "Not fully retained"}
+                                      </strong>
+                                    </span>
+
+                                    <span>
+                                      Interval frequency analysis{" "}
+                                      <strong>
+                                        {profile.long_temporal.continuity
+                                          .interval_frequency_complete
+                                          ? "Complete"
+                                          : "Bounded"}
+                                      </strong>
+                                    </span>
+
+                                    {profile.long_temporal.execution && (
+                                      <>
+                                        <span>
+                                          Observed order basis{" "}
+                                          <strong>
+                                            {profile.long_temporal.execution
+                                              .observed_order_basis ?? "Unknown"}
+                                          </strong>
+                                        </span>
+
+                                        <span>
+                                          Canonical order established{" "}
+                                          <strong>
+                                            {profile.long_temporal.execution
+                                              .canonical_order_established === true
+                                              ? "Yes"
+                                              : profile.long_temporal.execution
+                                                .canonical_order_established === false
+                                                ? "No"
+                                                : "Not evaluated"}
+                                          </strong>
+                                        </span>
+                                      </>
+                                    )}
+
+                                    {profile.long_temporal.continuity
+                                      .largest_positive_intervals.length > 0 && (
+                                        <>
+                                          <span>
+                                            <strong>
+                                              Largest observed positive intervals
+                                            </strong>
+                                          </span>
+
+                                          {profile.long_temporal.continuity
+                                            .largest_positive_intervals.map(
+                                              (interval) => (
+                                                <span
+                                                  key={`${interval.from_index}-${interval.to_index}`}
+                                                >
+                                                  <strong>
+                                                    {interval.interval_seconds >= 3600
+                                                      ? `${(
+                                                        interval.interval_seconds / 3600
+                                                      ).toFixed(1)} h`
+                                                      : `${interval.interval_seconds.toLocaleString()} s`}
+                                                  </strong>{" "}
+                                                  {interval.from_value} → {interval.to_value}
+                                                </span>
+                                              ),
+                                            )}
+                                        </>
+                                      )}
+                                  </div>
+                                </div>
+                              )}
 
                             {strategy === "long_temporal" && (
                               <div className="analysis-group">
