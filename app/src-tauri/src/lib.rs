@@ -328,6 +328,27 @@ fn explore_wide_temporal_series_detail(
 }
 
 #[tauri::command(async)]
+fn explore_long_temporal_series(
+    path: String,
+    temporal_axis_json: String,
+    value_column_name: String,
+    point_limit: u32,
+) -> Result<String, String> {
+    let arguments = vec![
+        "long-temporal-series-context".to_string(),
+        path,
+        temporal_axis_json,
+        value_column_name,
+        point_limit.to_string(),
+    ];
+
+    run_profile_json_command(
+        &arguments,
+        "Long temporal series exploration",
+    )
+}
+
+#[tauri::command(async)]
 fn explore_wide_temporal_reference(
     path: String,
     temporal_axis_json: String,
@@ -1013,6 +1034,7 @@ pub fn run() {
             profile_dataset,
             explore_wide_temporal_series_page,
             explore_wide_temporal_series_detail,
+            explore_long_temporal_series,
             explore_wide_temporal_reference,
             explore_wide_temporal_reference_comparison,
 			raw_analysis_dataset,
