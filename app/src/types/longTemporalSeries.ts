@@ -1,12 +1,28 @@
 export type LongTemporalSeriesProjectionPoint = {
   projection_index: number;
   time: string;
+  value: number;
+  position: number;
+  roles: string[];
+  break_before: boolean;
+};
+
+export type LongTemporalSeriesBucket = {
+  bucket_index: number;
+  bucket_start: string;
+  bucket_end: string;
   count: number;
   mean: number | null;
   minimum: number | null;
   maximum: number | null;
-  bucket_start: string | null;
-  bucket_end: string | null;
+};
+
+export type LongTemporalSeriesGroup = {
+  time: string;
+  count: number;
+  mean: number | null;
+  minimum: number | null;
+  maximum: number | null;
 };
 
 export type LongTemporalSeriesSource = {
@@ -19,8 +35,11 @@ export type LongTemporalSeriesDisplayProjection = {
   mode: string;
   point_limit: number;
   point_count: number;
+  bucket_count: number | null;
   bucket_width_seconds: number | null;
   points: LongTemporalSeriesProjectionPoint[];
+  buckets?: LongTemporalSeriesBucket[];
+  groups?: LongTemporalSeriesGroup[];
 };
 
 export type LongTemporalSeriesExecution = {
@@ -45,7 +64,7 @@ export type LongTemporalSeriesResult = {
   source: LongTemporalSeriesSource;
 
   display_projection:
-    LongTemporalSeriesDisplayProjection;
+  LongTemporalSeriesDisplayProjection;
 
   execution: LongTemporalSeriesExecution;
 };

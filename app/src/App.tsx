@@ -10,11 +10,16 @@ import type {
 } from "./types/project";
 import "./App.css";
 import type {
-  NumericTemporalPairResult,
   RawAnalysisColumnResult,
 } from "./types/rawAnalysis";
 import { RawAnalysisVisualization } from "./components/RawAnalysisVisualization";
 import { WideTemporalSeriesDetailPanel } from "./components/WideTemporalSeriesDetailPanel";
+import type {
+  LongTemporalSeriesResult,
+} from "./types/longTemporalSeries";
+import {
+  LongTemporalSeriesChart,
+} from "./components/LongTemporalSeriesChart";
 import type {
   WideTemporalSeriesDetail,
   WideTemporalSeriesPage,
@@ -429,34 +434,6 @@ function getColumnSignals(
   return signals;
 }
 
-function formatTemporalTimestamp(value: string | null): string {
-  if (!value) {
-    return "n/a";
-  }
-
-  return value.replace("T", " ").slice(0, 16);
-}
-
-function formatDurationSeconds(value: number | null): string {
-  if (value === null) {
-    return "n/a";
-  }
-
-  if (value < 60) {
-    return `${value} s`;
-  }
-
-  if (value < 3600) {
-    return `${Number((value / 60).toFixed(1))} min`;
-  }
-
-  if (value < 86400) {
-    return `${Number((value / 3600).toFixed(1))} h`;
-  }
-
-  return `${Number((value / 86400).toFixed(1))} d`;
-}
-
 function formatWideTemporalScalar(
   value: string | number | boolean | null,
 ): string {
@@ -525,10 +502,20 @@ function App() {
 
   const [showAllDetectedColumns, setShowAllDetectedColumns] = useState(false);
 
-  const [temporalTimeColumn, setTemporalTimeColumn] = useState("");
-  const [temporalValueColumn, setTemporalValueColumn] = useState("");
-  const [temporalAnalysisResult, setTemporalAnalysisResult] =
-    useState<NumericTemporalPairResult | null>(null);
+  const [temporalValueColumn, setTemporalValueColumn] =
+    useState("");
+
+  const [
+    longTemporalSeries,
+    setLongTemporalSeries,
+  ] = useState<LongTemporalSeriesResult | null>(
+    null,
+  );
+
+  const [
+    isLoadingLongTemporalSeries,
+    setIsLoadingLongTemporalSeries,
+  ] = useState(false);
 
   const [
     wideTemporalSeriesClassification,
@@ -1555,60 +1542,77 @@ function App() {
     return parsedResult;
   }
 
-  async function runNumericTemporalAnalysis(
-    timeColumn: string,
-    valueColumn: string,
-  ): Promise<NumericTemporalPairResult | null> {
-    if (!fileInfo || !activeProject) {
+  async function loadLongTemporalSeries(
+    valueColumnName: string,
+  ): Promise<LongTemporalSeriesResult | null> {
+    if (!fileInfo) {
       return null;
     }
 
-    const activeDataset = activeProject.datasets.find(
-      (dataset) =>
-        dataset.id === activeProject.activeDatasetId,
-    );
+    const temporalAxis =
+      profile?.structural_model
+        ?.logical_structure
+        ?.temporal_axis;
 
-    const timeMetadata =
-      activeDataset?.metadata.columns.find(
-        (metadata) =>
-          metadata.columnName === timeColumn,
+    if (
+      !temporalAxis ||
+      temporalAxis.orientation !== "vertical"
+    ) {
+      setError(
+        "Time / Value Explorer requires the vertical temporal axis established by Light Analysis.",
       );
 
-    const valueMetadata =
-      activeDataset?.metadata.columns.find(
-        (metadata) =>
-          metadata.columnName === valueColumn,
+      return null;
+    }
+
+    const temporalAxisJson =
+      JSON.stringify(temporalAxis);
+
+    setIsLoadingLongTemporalSeries(true);
+    setError(null);
+
+    try {
+      const rawResult =
+        await invoke<string>(
+          "explore_long_temporal_series",
+          {
+            path: fileInfo.path,
+            temporalAxisJson,
+            valueColumnName,
+            pointLimit: 1000,
+          },
+        );
+
+      const parsedResult =
+        JSON.parse(
+          rawResult,
+        ) as LongTemporalSeriesResult;
+
+      /*
+       * Replace the displayed series only
+       * after the new series has loaded
+       * successfully.
+       */
+      setLongTemporalSeries(
+        parsedResult,
       );
 
-    const excludedTimeValues =
-      timeMetadata?.specialValues.map(
-        (specialValue) => specialValue.value,
-      ) ?? [];
+      return parsedResult;
+    } catch (err) {
+      /*
+       * Preserve the currently displayed
+       * series if loading the replacement
+       * fails.
+       */
+      setError(String(err));
 
-    const excludedValueValues =
-      valueMetadata?.specialValues.map(
-        (specialValue) => specialValue.value,
-      ) ?? [];
-
-    const rawResult = await invoke<string>(
-      "raw_analysis_temporal_dataset",
-      {
-        path: fileInfo.path,
-        timeColumn,
-        valueColumn,
-        timeFormatHint:
-          timeMetadata?.format ?? null,
-        excludedTimeValues,
-        excludedValueValues,
-        maxPoints: 1000,
-      },
-    );
-
-    return JSON.parse(
-      rawResult,
-    ) as NumericTemporalPairResult;
+      return null;
+    } finally {
+      setIsLoadingLongTemporalSeries(
+        false,
+      );
+    }
   }
-
   async function inspectDatasetStructure(path: string) {
     const rawStructure = await invoke<string>("inspect_structure", {
       path,
@@ -1837,7 +1841,13 @@ function App() {
   }
   return (
     <main className="app-shell">
-      <section className="hero">
+      <section
+        className={
+          activeProject
+            ? "project-page"
+            : "hero"
+        }
+      >
         <div className="app-header">
           <div className="brand">RAWSIGHT</div>
 
@@ -2037,18 +2047,12 @@ function App() {
                               detectedTemporalAxis.sequence_index
                             ]?.name ?? ""
                             : "";
-
-                        const selectedTemporalTimeColumn =
-                          temporalTimeColumn ||
-                          detectedTemporalColumnName;
-
                         const selectedScopeColumn =
                           scopeColumns.find(
                             (column) =>
                               column.columnName ===
                               rawAnalysisColumnName,
                           );
-
                         return (
                           <>
                             <div className="analysis-group">
@@ -2534,6 +2538,7 @@ function App() {
                                 </div>
                               )}
 
+
                             {strategy === "long_temporal" && (
                               <div className="analysis-group">
                                 <div className="analysis-group-header">
@@ -2563,281 +2568,150 @@ function App() {
                                     }}
                                   >
                                     <select
-                                      value={selectedTemporalTimeColumn}
-                                      onChange={(event) =>
-                                        setTemporalTimeColumn(
-                                          event.target.value,
-                                        )
-                                      }
-                                    >
-                                      <option value="">
-                                        Choose time column
-                                      </option>
-
-                                      {columns.map((column) => (
-                                        <option
-                                          key={column.name}
-                                          value={column.name}
-                                        >
-                                          {column.name}
-                                        </option>
-                                      ))}
-                                    </select>
-
-                                    <select
                                       value={temporalValueColumn}
-                                      onChange={(event) =>
+                                      disabled={
+                                        isLoadingLongTemporalSeries
+                                      }
+                                      onChange={(event) => {
                                         setTemporalValueColumn(
                                           event.target.value,
-                                        )
-                                      }
+                                        );
+                                      }}
                                     >
                                       <option value="">
                                         Choose value column
                                       </option>
 
-                                      {columns.map((column) => (
-                                        <option
-                                          key={column.name}
-                                          value={column.name}
-                                        >
-                                          {column.name}
-                                        </option>
-                                      ))}
+                                      {columns
+                                        .filter((column) => {
+                                          if (
+                                            column.name ===
+                                            detectedTemporalColumnName
+                                          ) {
+                                            return false;
+                                          }
+
+                                          const technicalType =
+                                            column.technicalType
+                                              .trim()
+                                              .toUpperCase();
+
+                                          return [
+                                            "TINYINT",
+                                            "SMALLINT",
+                                            "INTEGER",
+                                            "BIGINT",
+                                            "HUGEINT",
+                                            "UTINYINT",
+                                            "USMALLINT",
+                                            "UINTEGER",
+                                            "UBIGINT",
+                                            "UHUGEINT",
+                                            "FLOAT",
+                                            "REAL",
+                                            "DOUBLE",
+                                            "DECIMAL",
+                                          ].some((prefix) =>
+                                            technicalType.startsWith(
+                                              prefix,
+                                            ),
+                                          );
+                                        })
+                                        .map((column) => (
+                                          <option
+                                            key={column.name}
+                                            value={column.name}
+                                          >
+                                            {column.name}
+                                          </option>
+                                        ))}
                                     </select>
 
                                     <button
                                       type="button"
                                       disabled={
-                                        !selectedTemporalTimeColumn ||
-                                        !temporalValueColumn
+                                        !temporalValueColumn ||
+                                        !detectedTemporalColumnName ||
+                                        isLoadingLongTemporalSeries
                                       }
-                                      onClick={async () => {
-                                        const result =
-                                          await runNumericTemporalAnalysis(
-                                            selectedTemporalTimeColumn,
-                                            temporalValueColumn,
-                                          );
-
-                                        setTemporalAnalysisResult(
-                                          result,
+                                      onClick={() => {
+                                        void loadLongTemporalSeries(
+                                          temporalValueColumn,
                                         );
                                       }}
                                     >
-                                      Run Temporal Analysis
+                                      {isLoadingLongTemporalSeries
+                                        ? "Loading..."
+                                        : "Show temporal series"}
                                     </button>
 
-                                    {temporalAnalysisResult && (
-                                      <div>
-                                        <h4>
-                                          Temporal Analysis Summary
-                                        </h4>
+                                    {longTemporalSeries && (
+                                      <div
+                                        style={{
+                                          marginTop: "24px",
+                                          display: "grid",
+                                          gap: "16px",
+                                        }}
+                                      >
+                                        <div className="analysis-group-content">
+                                          <span>
+                                            Value field{" "}
+                                            <strong>
+                                              {
+                                                longTemporalSeries
+                                                  .value_column_name
+                                              }
+                                            </strong>
+                                          </span>
 
-                                        <p>
-                                          <strong>Time column:</strong>{" "}
-                                          {
-                                            temporalAnalysisResult.time_column
-                                          }
-                                        </p>
+                                          <span>
+                                            Usable observations{" "}
+                                            <strong>
+                                              {longTemporalSeries.source
+                                                .usable_observation_count
+                                                .toLocaleString()}
+                                            </strong>
+                                          </span>
 
-                                        <p>
-                                          <strong>Value column:</strong>{" "}
-                                          {
-                                            temporalAnalysisResult.value_column
-                                          }
-                                        </p>
+                                          <span>
+                                            Projection{" "}
+                                            <strong>
+                                              {
+                                                longTemporalSeries
+                                                  .display_projection
+                                                  .mode
+                                              }
+                                            </strong>
+                                          </span>
 
-                                        <p>
-                                          <strong>Status:</strong>{" "}
-                                          {
-                                            temporalAnalysisResult.series
-                                              .status
-                                          }
-                                        </p>
+                                          <span>
+                                            Display points{" "}
+                                            <strong>
+                                              {longTemporalSeries
+                                                .display_projection
+                                                .point_count
+                                                .toLocaleString()}
+                                            </strong>
+                                          </span>
+                                        </div>
 
-                                        <p>
-                                          <strong>Usable rows:</strong>{" "}
-                                          {
-                                            temporalAnalysisResult.series
-                                              .usable_rows
-                                          }
-                                        </p>
+                                        <LongTemporalSeriesChart
+                                          result={longTemporalSeries}
+                                        />
 
-                                        <p>
-                                          <strong>
-                                            Distinct time points:
-                                          </strong>{" "}
-                                          {
-                                            temporalAnalysisResult.series
-                                              .distinct_time_points
-                                          }
-                                        </p>
-
-                                        <p>
-                                          <strong>Bucketed:</strong>{" "}
-                                          {temporalAnalysisResult.series
-                                            .bucketed
-                                            ? "Yes"
-                                            : "No"}
-                                        </p>
-
-                                        <h4>Trend</h4>
-
-                                        <p>
-                                          <strong>
-                                            First observation:
-                                          </strong>{" "}
-                                          {formatTemporalTimestamp(
-                                            temporalAnalysisResult.trend
-                                              .first_observation,
+                                        {longTemporalSeries.execution
+                                          .limitations.length > 0 && (
+                                            <div className="analysis-group-content">
+                                              {longTemporalSeries.execution
+                                                .limitations.map(
+                                                  (limitation) => (
+                                                    <span key={limitation}>
+                                                      {limitation}
+                                                    </span>
+                                                  ),
+                                                )}
+                                            </div>
                                           )}
-                                        </p>
-
-                                        <p>
-                                          <strong>
-                                            Last observation:
-                                          </strong>{" "}
-                                          {formatTemporalTimestamp(
-                                            temporalAnalysisResult.trend
-                                              .last_observation,
-                                          )}
-                                        </p>
-
-                                        <p>
-                                          <strong>
-                                            Slope per day:
-                                          </strong>{" "}
-                                          {
-                                            temporalAnalysisResult.trend
-                                              .slope_per_day
-                                          }
-                                        </p>
-
-                                        <p>
-                                          <strong>
-                                            Time correlation:
-                                          </strong>{" "}
-                                          {
-                                            temporalAnalysisResult.trend
-                                              .pearson_time_correlation
-                                          }
-                                        </p>
-
-                                        <p>
-                                          <strong>R²:</strong>{" "}
-                                          {
-                                            temporalAnalysisResult.trend
-                                              .r_squared
-                                          }
-                                        </p>
-
-                                        <h4>Cadence</h4>
-
-                                        <p>
-                                          <strong>Intervals:</strong>{" "}
-                                          {
-                                            temporalAnalysisResult.cadence
-                                              .interval_count
-                                          }
-                                        </p>
-
-                                        <p>
-                                          <strong>
-                                            Median interval:
-                                          </strong>{" "}
-                                          {formatDurationSeconds(
-                                            temporalAnalysisResult.cadence
-                                              .median_interval_seconds,
-                                          )}
-                                        </p>
-
-                                        <h4>Gaps</h4>
-
-                                        <p>
-                                          <strong>Status:</strong>{" "}
-                                          {
-                                            temporalAnalysisResult.gaps
-                                              .status
-                                          }
-                                        </p>
-
-                                        <p>
-                                          <strong>Gap count:</strong>{" "}
-                                          {
-                                            temporalAnalysisResult.gaps
-                                              .gap_count
-                                          }
-                                        </p>
-
-                                        <p>
-                                          <strong>
-                                            Gap threshold:
-                                          </strong>{" "}
-                                          {formatDurationSeconds(
-                                            temporalAnalysisResult.gaps
-                                              .gap_threshold_seconds,
-                                          )}
-                                        </p>
-
-                                        {temporalAnalysisResult.gaps.gaps
-                                          .length > 0 && (
-                                            <>
-                                              <h4>Detected gaps</h4>
-
-                                              <table className="temporal-gap-table">
-                                                <thead>
-                                                  <tr>
-                                                    <th>From</th>
-                                                    <th>To</th>
-                                                    <th>Duration</th>
-                                                    <th>× median</th>
-                                                  </tr>
-                                                </thead>
-
-                                                <tbody>
-                                                  {temporalAnalysisResult.gaps.gaps.map(
-                                                    (gap) => (
-                                                      <tr
-                                                        key={`${gap.from}-${gap.to}`}
-                                                      >
-                                                        <td>
-                                                          {formatTemporalTimestamp(
-                                                            gap.from,
-                                                          )}
-                                                        </td>
-                                                        <td>
-                                                          {formatTemporalTimestamp(
-                                                            gap.to,
-                                                          )}
-                                                        </td>
-                                                        <td>
-                                                          {formatDurationSeconds(
-                                                            gap.interval_seconds,
-                                                          )}
-                                                        </td>
-                                                        <td>
-                                                          {
-                                                            gap.multiple_of_median
-                                                          }
-                                                        </td>
-                                                      </tr>
-                                                    ),
-                                                  )}
-                                                </tbody>
-                                              </table>
-                                            </>
-                                          )}
-
-                                        <details>
-                                          <summary>Raw JSON</summary>
-                                          <pre>
-                                            {JSON.stringify(
-                                              temporalAnalysisResult,
-                                              null,
-                                              2,
-                                            )}
-                                          </pre>
-                                        </details>
                                       </div>
                                     )}
                                   </div>

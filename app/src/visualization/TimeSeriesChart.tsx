@@ -9,6 +9,7 @@ import type {
   TimeSeriesPoint,
 } from "./types";
 
+
 function numericValues(
   points: TimeSeriesPoint[],
 ): number[] {
@@ -21,73 +22,94 @@ function numericValues(
     );
 }
 
-function nearestNumericPosition(
+
+function clampRatio(
+  value: number,
+): number {
+  return Math.max(
+    0,
+    Math.min(
+      1,
+      value,
+    ),
+  );
+}
+
+
+function pointRatio(
+  point: TimeSeriesPoint,
+  position: number,
+  pointCount: number,
+): number {
+  if (
+    typeof point.xPosition === "number" &&
+    Number.isFinite(point.xPosition)
+  ) {
+    return clampRatio(
+      point.xPosition,
+    );
+  }
+
+  if (pointCount <= 1) {
+    return 0.5;
+  }
+
+  return (
+    position
+    / (pointCount - 1)
+  );
+}
+
+
+function nearestPointPosition(
   points: TimeSeriesPoint[],
-  requestedPosition: number,
+  requestedRatio: number,
+  requireNumericValue: boolean,
 ): number | null {
   if (points.length === 0) {
     return null;
   }
 
-  const boundedPosition = Math.max(
-    0,
-    Math.min(
-      points.length - 1,
-      requestedPosition,
-    ),
+  let bestPosition: number | null = null;
+  let bestDistance =
+    Number.POSITIVE_INFINITY;
+
+  points.forEach(
+    (point, position) => {
+      if (
+        requireNumericValue &&
+        (
+          point.value === null ||
+          !Number.isFinite(
+            point.value,
+          )
+        )
+      ) {
+        return;
+      }
+
+      const ratio = pointRatio(
+        point,
+        position,
+        points.length,
+      );
+
+      const distance = Math.abs(
+        ratio - requestedRatio,
+      );
+
+      if (
+        distance < bestDistance
+      ) {
+        bestDistance = distance;
+        bestPosition = position;
+      }
+    },
   );
 
-  const directPoint =
-    points[boundedPosition];
-
-  if (
-    directPoint.value !== null &&
-    Number.isFinite(
-      directPoint.value,
-    )
-  ) {
-    return boundedPosition;
-  }
-
-  for (
-    let distance = 1;
-    distance < points.length;
-    distance += 1
-  ) {
-    const left =
-      boundedPosition - distance;
-    const right =
-      boundedPosition + distance;
-
-    if (left >= 0) {
-      const point = points[left];
-
-      if (
-        point.value !== null &&
-        Number.isFinite(
-          point.value,
-        )
-      ) {
-        return left;
-      }
-    }
-
-    if (right < points.length) {
-      const point = points[right];
-
-      if (
-        point.value !== null &&
-        Number.isFinite(
-          point.value,
-        )
-      ) {
-        return right;
-      }
-    }
-  }
-
-  return null;
+  return bestPosition;
 }
+
 
 export function TimeSeriesChart({
   points,
@@ -95,6 +117,7 @@ export function TimeSeriesChart({
   title = "Time series",
   ariaLabel = "Time series chart",
   markerLegend,
+  seriesStrokeWidth = 3.8,
   inspectionIndex,
   inspectionLocked = false,
   onInspectionHover,
@@ -111,23 +134,32 @@ export function TimeSeriesChart({
   };
 
   const plotWidth =
-    width - padding.left - padding.right;
-  const plotHeight =
-    height - padding.top - padding.bottom;
+    width
+    - padding.left
+    - padding.right;
 
-  const values = numericValues(points);
+  const plotHeight =
+    height
+    - padding.top
+    - padding.bottom;
+
+  const values =
+    numericValues(points);
 
   const [
     hoverPosition,
     setHoverPosition,
-  ] = useState<number | null>(null);
+  ] = useState<number | null>(
+    null,
+  );
 
   if (values.length === 0) {
     return (
       <div
         style={{
           padding: "16px",
-          border: "1px solid currentColor",
+          border:
+            "1px solid currentColor",
           borderRadius: "8px",
           opacity: 0.75,
         }}
@@ -137,172 +169,254 @@ export function TimeSeriesChart({
     );
   }
 
-  const observedMin = Math.min(...values);
-  const observedMax = Math.max(...values);
+  const observedMin =
+    Math.min(...values);
+
+  const observedMax =
+    Math.max(...values);
 
   const scalePadding =
     observedMax === observedMin
       ? Math.max(
-          Math.abs(observedMax) * 0.05,
-          1,
-        )
+        Math.abs(
+          observedMax,
+        ) * 0.05,
+        1,
+      )
       : 0;
 
   const scaleMin =
-    observedMin - scalePadding;
+    observedMin
+    - scalePadding;
+
   const scaleMax =
-    observedMax + scalePadding;
+    observedMax
+    + scalePadding;
 
   const valueRange =
-    scaleMax - scaleMin || 1;
+    scaleMax
+    - scaleMin
+    || 1;
 
-  const pointCount = points.length;
+  const pointCount =
+    points.length;
 
-  const xForPosition = (
+  const xForPoint = (
+    point: TimeSeriesPoint,
     position: number,
   ) =>
-    padding.left +
-    (pointCount <= 1
-      ? plotWidth / 2
-      : (position / (pointCount - 1)) *
-        plotWidth);
+    padding.left
+    + pointRatio(
+      point,
+      position,
+      pointCount,
+    )
+    * plotWidth;
 
   const yForValue = (
     value: number,
   ) =>
-    padding.top +
-    ((scaleMax - value) / valueRange) *
-      plotHeight;
+    padding.top
+    + (
+      (
+        scaleMax - value
+      )
+      / valueRange
+    )
+    * plotHeight;
 
   const segments: string[] = [];
-  let currentSegment: string[] = [];
+
+  let currentSegment:
+    string[] = [];
+
+  function flushSegment() {
+    if (
+      currentSegment.length > 0
+    ) {
+      segments.push(
+        currentSegment.join(" "),
+      );
+
+      currentSegment = [];
+    }
+  }
 
   points.forEach(
     (point, position) => {
       if (
+        point.breakBefore
+      ) {
+        flushSegment();
+      }
+
+      if (
         point.value !== null &&
-        Number.isFinite(point.value)
+        Number.isFinite(
+          point.value,
+        )
       ) {
         currentSegment.push(
-          `${xForPosition(
+          `${xForPoint(
+            point,
             position,
-          )},${yForValue(point.value)}`,
+          )},${yForValue(
+            point.value,
+          )}`,
         );
+
         return;
       }
 
-      if (currentSegment.length > 0) {
-        segments.push(
-          currentSegment.join(" "),
-        );
-        currentSegment = [];
-      }
+      flushSegment();
     },
   );
 
-  if (currentSegment.length > 0) {
-    segments.push(
-      currentSegment.join(" "),
-    );
-  }
+  flushSegment();
 
-  const positionByIndex = new Map(
-    points.map(
-      (point, position) => [
-        point.index,
-        position,
-      ],
-    ),
-  );
+  const positionByIndex =
+    new Map(
+      points.map(
+        (
+          point,
+          position,
+        ) => [
+            point.index,
+            position,
+          ],
+      ),
+    );
 
   const linkedPosition =
     inspectionIndex === undefined ||
-    inspectionIndex === null
+      inspectionIndex === null
       ? null
-      : positionByIndex.get(
+      : (
+        positionByIndex.get(
           inspectionIndex,
-        ) ?? null;
+        )
+        ?? null
+      );
 
   const activePosition =
-    linkedPosition ??
-    hoverPosition;
+    linkedPosition
+    ?? hoverPosition;
 
-  const resolvedMarkers = markers
-    .map((marker) => {
-      const position =
-        positionByIndex.get(
-          marker.index,
-        );
+  const resolvedMarkers =
+    markers
+      .map((marker) => {
+        const position =
+          positionByIndex.get(
+            marker.index,
+          );
 
-      if (position === undefined) {
-        return null;
-      }
+        if (
+          position === undefined
+        ) {
+          return null;
+        }
 
-      return {
-        ...marker,
-        position,
-        x: xForPosition(position),
-        y: yForValue(marker.value),
-      };
-    })
-    .filter(
-      (
-        marker,
-      ): marker is TimeSeriesMarker & {
-        position: number;
-        x: number;
-        y: number;
-      } => marker !== null,
-    );
+        const point =
+          points[position];
+
+        return {
+          ...marker,
+          position,
+          x: xForPoint(
+            point,
+            position,
+          ),
+          y: yForValue(
+            marker.value,
+          ),
+        };
+      })
+      .filter(
+        (
+          marker,
+        ): marker is
+          TimeSeriesMarker & {
+            position: number;
+            x: number;
+            y: number;
+          } =>
+          marker !== null,
+      );
 
   const firstLabel =
-    points[0]?.label ?? "";
+    points[0]?.axisLabel
+    ?? points[0]?.label
+    ?? "";
 
   const lastLabel =
     points[
       points.length - 1
-    ]?.label ?? "";
+    ]?.axisLabel
+    ?? points[
+      points.length - 1
+    ]?.label
+    ?? "";
 
-  const yTicks = Array.from(
-    { length: 5 },
-    (_, index) => {
-      const ratio = index / 4;
-      const value =
-        scaleMax -
-        valueRange * ratio;
+  const yTicks =
+    Array.from(
+      {
+        length: 5,
+      },
+      (_, index) => {
+        const ratio =
+          index / 4;
 
-      return {
-        value,
-        y:
-          padding.top +
-          plotHeight * ratio,
-      };
-    },
-  );
+        const value =
+          scaleMax
+          - valueRange
+          * ratio;
+
+        return {
+          value,
+          y:
+            padding.top
+            + plotHeight
+            * ratio,
+        };
+      },
+    );
 
   const hoveredPoint =
     activePosition === null
       ? null
-      : points[activePosition] ?? null;
+      : (
+        points[
+        activePosition
+        ]
+        ?? null
+      );
 
   const hoveredX =
-    activePosition === null
+    activePosition === null ||
+      !hoveredPoint
       ? null
-      : xForPosition(activePosition);
+      : xForPoint(
+        hoveredPoint,
+        activePosition,
+      );
 
   const hoveredY =
     hoveredPoint?.value === null ||
-    hoveredPoint?.value === undefined
+      hoveredPoint?.value === undefined
       ? null
       : yForValue(
-          hoveredPoint.value,
-        );
+        hoveredPoint.value,
+      );
 
   function handlePointerMove(
-    event: ReactPointerEvent<SVGSVGElement>,
+    event:
+      ReactPointerEvent<
+        SVGSVGElement
+      >,
   ) {
     const bounds =
-      event.currentTarget.getBoundingClientRect();
+      event.currentTarget
+        .getBoundingClientRect();
 
     if (
       bounds.width <= 0 ||
@@ -312,43 +426,48 @@ export function TimeSeriesChart({
     }
 
     const viewBoxX =
-      ((event.clientX - bounds.left) /
-        bounds.width) *
-      width;
+      (
+        (
+          event.clientX
+          - bounds.left
+        )
+        / bounds.width
+      )
+      * width;
 
-    const clampedX = Math.max(
-      padding.left,
-      Math.min(
-        width - padding.right,
-        viewBoxX,
-      ),
-    );
-
-    const requestedPosition =
-      pointCount <= 1
-        ? 0
-        : Math.round(
-            ((clampedX - padding.left) /
-              plotWidth) *
-              (pointCount - 1),
-          );
-
-    const boundedPosition =
+    const clampedX =
       Math.max(
-        0,
+        padding.left,
         Math.min(
-          pointCount - 1,
-          requestedPosition,
+          width
+          - padding.right,
+          viewBoxX,
         ),
       );
 
+    const requestedRatio =
+      clampRatio(
+        (
+          clampedX
+          - padding.left
+        )
+        / plotWidth,
+      );
+
+    /*
+     * Linked inspection must preserve
+     * displayed position even if a
+     * linked point lacks a numeric value.
+     *
+     * Standalone inspection instead
+     * chooses the nearest numeric point.
+     */
     const localPosition =
-      onInspectionHover
-        ? boundedPosition
-        : nearestNumericPosition(
-            points,
-            boundedPosition,
-          );
+      nearestPointPosition(
+        points,
+        requestedRatio,
+        !onInspectionHover,
+      );
 
     setHoverPosition(
       localPosition,
@@ -359,14 +478,21 @@ export function TimeSeriesChart({
       localPosition !== null
     ) {
       onInspectionHover(
-        points[localPosition].index,
+        points[
+          localPosition
+        ].index,
       );
     }
   }
 
   function handlePointerLeave() {
-    setHoverPosition(null);
-    onInspectionHover?.(null);
+    setHoverPosition(
+      null,
+    );
+
+    onInspectionHover?.(
+      null,
+    );
   }
 
   function handleClick() {
@@ -378,7 +504,9 @@ export function TimeSeriesChart({
     }
 
     onInspectionToggle(
-      points[hoverPosition].index,
+      points[
+        hoverPosition
+      ].index,
     );
   }
 
@@ -399,7 +527,9 @@ export function TimeSeriesChart({
           flexWrap: "wrap",
         }}
       >
-        <strong>{title}</strong>
+        <strong>
+          {title}
+        </strong>
 
         <span>
           Min{" "}
@@ -433,21 +563,28 @@ export function TimeSeriesChart({
                 ? "Locked"
                 : "Inspecting"}
             </strong>
+
             <span>
               {hoveredPoint.label}
             </span>
+
             <span>
               Value{" "}
               <strong>
-                {hoveredPoint.value === null
+                {hoveredPoint.value
+                  === null
                   ? "—"
-                  : hoveredPoint.value.toLocaleString()}
+                  : hoveredPoint.value
+                    .toLocaleString()}
               </strong>
             </span>
+
             <span>
               Position{" "}
               <strong>
-                {hoveredPoint.index}
+                {
+                  hoveredPoint.index
+                }
               </strong>
             </span>
           </>
@@ -457,7 +594,8 @@ export function TimeSeriesChart({
               opacity: 0.7,
             }}
           >
-            Hover over the plot to inspect the nearest observed point.
+            Hover over the plot to inspect
+            the nearest displayed point.
           </span>
         )}
       </div>
@@ -469,17 +607,25 @@ export function TimeSeriesChart({
         }}
       >
         <svg
-          viewBox={`0 0 ${width} ${height}`}
+          viewBox={
+            `0 0 ${width} ${height}`
+          }
           role="img"
-          aria-label={ariaLabel}
+          aria-label={
+            ariaLabel
+          }
           onPointerMove={
             handlePointerMove
           }
           onPointerLeave={
             handlePointerLeave
           }
-          onClick={handleClick}
-          shapeRendering="geometricPrecision"
+          onClick={
+            handleClick
+          }
+          shapeRendering={
+            "geometricPrecision"
+          }
           style={{
             width: "100%",
             height: "auto",
@@ -489,47 +635,83 @@ export function TimeSeriesChart({
           }}
         >
           <line
-            x1={padding.left}
-            y1={padding.top}
-            x2={padding.left}
-            y2={
-              height - padding.bottom
+            x1={
+              padding.left
             }
-            stroke="CanvasText"
+            y1={
+              padding.top
+            }
+            x2={
+              padding.left
+            }
+            y2={
+              height
+              - padding.bottom
+            }
+            stroke={
+              "CanvasText"
+            }
             opacity="0.85"
             strokeWidth="2"
-            vectorEffect="non-scaling-stroke"
+            vectorEffect={
+              "non-scaling-stroke"
+            }
           />
 
           <line
-            x1={padding.left}
+            x1={
+              padding.left
+            }
             y1={
-              height - padding.bottom
+              height
+              - padding.bottom
             }
             x2={
-              width - padding.right
+              width
+              - padding.right
             }
             y2={
-              height - padding.bottom
+              height
+              - padding.bottom
             }
-            stroke="CanvasText"
+            stroke={
+              "CanvasText"
+            }
             opacity="0.85"
             strokeWidth="2"
-            vectorEffect="non-scaling-stroke"
+            vectorEffect={
+              "non-scaling-stroke"
+            }
           />
 
-
           {segments.map(
-            (segment, index) => (
+            (
+              segment,
+              index,
+            ) => (
               <polyline
-                key={index}
-                points={segment}
+                key={
+                  index
+                }
+                points={
+                  segment
+                }
                 fill="none"
-                stroke="CanvasText"
-                strokeWidth="3.8"
-                strokeLinejoin="round"
-                strokeLinecap="round"
-                vectorEffect="non-scaling-stroke"
+                stroke={
+                  "CanvasText"
+                }
+                strokeWidth={
+                  seriesStrokeWidth
+                }
+                strokeLinejoin={
+                  "round"
+                }
+                strokeLinecap={
+                  "round"
+                }
+                vectorEffect={
+                  "non-scaling-stroke"
+                }
               />
             ),
           )}
@@ -537,20 +719,33 @@ export function TimeSeriesChart({
           {resolvedMarkers.map(
             (marker) => (
               <circle
-                key={`${marker.index}-${marker.label ?? ""}`}
-                cx={marker.x}
-                cy={marker.y}
+                key={
+                  `${marker.index}-` +
+                  `${marker.label ?? ""}`
+                }
+                cx={
+                  marker.x
+                }
+                cy={
+                  marker.y
+                }
                 r="6"
                 fill="Canvas"
-                stroke="CanvasText"
+                stroke={
+                  "CanvasText"
+                }
                 strokeWidth="3"
-                vectorEffect="non-scaling-stroke"
+                vectorEffect={
+                  "non-scaling-stroke"
+                }
               >
                 {(marker.title ||
                   marker.label) && (
                     <title>
-                      {marker.title ??
-                        marker.label}
+                      {
+                        marker.title
+                        ?? marker.label
+                      }
                     </title>
                   )}
               </circle>
@@ -561,14 +756,22 @@ export function TimeSeriesChart({
             hoveredPoint && (
               <>
                 <line
-                  x1={hoveredX}
-                  y1={padding.top}
-                  x2={hoveredX}
-                  y2={
-                    height -
-                    padding.bottom
+                  x1={
+                    hoveredX
                   }
-                  stroke="CanvasText"
+                  y1={
+                    padding.top
+                  }
+                  x2={
+                    hoveredX
+                  }
+                  y2={
+                    height
+                    - padding.bottom
+                  }
+                  stroke={
+                    "CanvasText"
+                  }
                   opacity="0.85"
                   strokeWidth="2.4"
                   strokeDasharray={
@@ -576,30 +779,48 @@ export function TimeSeriesChart({
                       ? undefined
                       : "7 5"
                   }
-                  vectorEffect="non-scaling-stroke"
+                  vectorEffect={
+                    "non-scaling-stroke"
+                  }
                 />
 
                 {hoveredY !== null && (
                   <>
                     <circle
-                      cx={hoveredX}
-                      cy={hoveredY}
+                      cx={
+                        hoveredX
+                      }
+                      cy={
+                        hoveredY
+                      }
                       r="10"
                       fill="none"
-                      stroke="CanvasText"
+                      stroke={
+                        "CanvasText"
+                      }
                       strokeWidth="2"
                       opacity="0.65"
-                      vectorEffect="non-scaling-stroke"
+                      vectorEffect={
+                        "non-scaling-stroke"
+                      }
                     />
 
                     <circle
-                      cx={hoveredX}
-                      cy={hoveredY}
+                      cx={
+                        hoveredX
+                      }
+                      cy={
+                        hoveredY
+                      }
                       r="5.5"
-                      fill="CanvasText"
+                      fill={
+                        "CanvasText"
+                      }
                       stroke="Canvas"
                       strokeWidth="2.5"
-                      vectorEffect="non-scaling-stroke"
+                      vectorEffect={
+                        "non-scaling-stroke"
+                      }
                     />
                   </>
                 )}
@@ -607,48 +828,89 @@ export function TimeSeriesChart({
             )}
 
           {yTicks.map(
-            (tick, index) => (
-              <g key={`y-tick-${index}`}>
+            (
+              tick,
+              index,
+            ) => (
+              <g
+                key={
+                  `y-tick-${index}`
+                }
+              >
                 <line
-                  x1={padding.left}
-                  y1={tick.y}
-                  x2={width - padding.right}
-                  y2={tick.y}
-                  stroke="CanvasText"
+                  x1={
+                    padding.left
+                  }
+                  y1={
+                    tick.y
+                  }
+                  x2={
+                    width
+                    - padding.right
+                  }
+                  y2={
+                    tick.y
+                  }
+                  stroke={
+                    "CanvasText"
+                  }
                   opacity={
                     index === 0 ||
-                    index === yTicks.length - 1
+                      index ===
+                      yTicks.length - 1
                       ? 0.22
                       : 0.14
                   }
                   strokeWidth="1.2"
-                  vectorEffect="non-scaling-stroke"
+                  vectorEffect={
+                    "non-scaling-stroke"
+                  }
                 />
 
                 <line
-                  x1={padding.left - 7}
-                  y1={tick.y}
-                  x2={padding.left}
-                  y2={tick.y}
-                  stroke="CanvasText"
+                  x1={
+                    padding.left - 7
+                  }
+                  y1={
+                    tick.y
+                  }
+                  x2={
+                    padding.left
+                  }
+                  y2={
+                    tick.y
+                  }
+                  stroke={
+                    "CanvasText"
+                  }
                   opacity="0.85"
                   strokeWidth="2"
-                  vectorEffect="non-scaling-stroke"
+                  vectorEffect={
+                    "non-scaling-stroke"
+                  }
                 />
 
                 <text
-                  x={padding.left - 14}
-                  y={tick.y + 7}
+                  x={
+                    padding.left - 14
+                  }
+                  y={
+                    tick.y + 7
+                  }
                   textAnchor="end"
                   fontSize="22"
                   fontWeight="600"
-                  fill="CanvasText"
+                  fill={
+                    "CanvasText"
+                  }
                   opacity="0.95"
                 >
                   {Number(
                     tick.value.toFixed(
-                      Math.abs(tick.value) < 10 &&
-                      tick.value % 1 !== 0
+                      Math.abs(
+                        tick.value,
+                      ) < 10 &&
+                        tick.value % 1 !== 0
                         ? 1
                         : 0,
                     ),
@@ -658,7 +920,6 @@ export function TimeSeriesChart({
             ),
           )}
         </svg>
-
       </div>
 
       <div
@@ -671,13 +932,20 @@ export function TimeSeriesChart({
           color: "CanvasText",
         }}
       >
-        <span>{firstLabel}</span>
-        <span>{lastLabel}</span>
+        <span>
+          {firstLabel}
+        </span>
+
+        <span>
+          {lastLabel}
+        </span>
       </div>
 
       {markerLegend &&
         resolvedMarkers.length > 0 && (
-          <span>{markerLegend}</span>
+          <span>
+            {markerLegend}
+          </span>
         )}
     </div>
   );
