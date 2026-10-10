@@ -13,6 +13,7 @@ from rawsight.wide_temporal_execution import (
     execute_wide_temporal_series_page,
 )
 from rawsight.long_temporal_series_execution import (
+    execute_long_temporal_series_detail,
     execute_long_temporal_series_projection,
 )
 from rawsight.wide_temporal_reference_execution import (
@@ -333,7 +334,7 @@ def _run_wide_temporal_series_detail_context(
     temporal_axis = (
         _validated_temporal_axis_from_json(
             arguments[2],
-            expected_orientation="horizontal",    
+            expected_orientation="horizontal",
         )
     )
     series_index = int(arguments[3])
@@ -471,6 +472,75 @@ def _run_long_temporal_series_context(
         )
     )
 
+def _run_long_temporal_series_detail_context(
+    arguments: list[str],
+) -> dict:
+    """
+    Build a temporal detail view from original observations
+    inside one caller-selected time interval.
+
+    Temporal structure is supplied by Light Analysis and is not
+    detected again here.
+
+    point_limit is a display/output resource bound only.
+    """
+
+    if len(arguments) != 7:
+        raise ValueError(
+            "long-temporal-series-detail-context requires: "
+            "<path> <temporal_axis_json> "
+            "<value_column_name> "
+            "<start_time> <end_time> <point_limit>"
+        )
+
+    file_path = arguments[1]
+
+    temporal_axis = (
+        _validated_temporal_axis_from_json(
+            arguments[2],
+            expected_orientation="vertical",
+        )
+    )
+
+    value_column_name = (
+        arguments[3]
+    )
+
+    if not value_column_name:
+        raise ValueError(
+            "Value column name is required"
+        )
+
+    start_time = arguments[4]
+    end_time = arguments[5]
+
+    if not start_time:
+        raise ValueError(
+            "start_time is required"
+        )
+
+    if not end_time:
+        raise ValueError(
+            "end_time is required"
+        )
+
+    point_limit = int(
+        arguments[6]
+    )
+
+    return (
+        execute_long_temporal_series_detail(
+            file_path=file_path,
+            temporal_axis=temporal_axis,
+            value_column_name=(
+                value_column_name
+            ),
+            start_time=start_time,
+            end_time=end_time,
+            point_limit=point_limit,
+        )
+    )
+
 def main(arguments: list[str]) -> int:
     """
     Backward-compatible engine entrypoint.
@@ -514,6 +584,12 @@ def main(arguments: list[str]) -> int:
         result = (
             _run_long_temporal_series_context(
                 arguments
+            )
+        )
+    elif command == "long-temporal-series-detail-context":
+        result = (
+            _run_long_temporal_series_detail_context(
+            arguments
             )
         )
 
