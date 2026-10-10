@@ -4,6 +4,7 @@ from typing import Any
 
 from rawsight.long_temporal_series import (
     build_temporal_value_projection,
+    build_time_bucket_extrema_projection,
     build_time_bucket_projection,
     temporal_to_json,
 )
@@ -178,9 +179,32 @@ def _execute_with_context(
     value_column_name: str,
     point_limit: int,
 ) -> dict[str, Any]:
-    if point_limit < 2:
+    """
+    Build one bounded temporal display projection.
+
+    Detection and structural normalization have already
+    established the vertical temporal axis.
+
+    Small temporal series are represented directly as
+    temporal-value groups.
+
+    Large temporal series are reduced with an
+    extrema-preserving display projection. Each time bucket
+    may contribute representative source observations for:
+
+    - first
+    - minimum
+    - maximum
+    - last
+
+    The display point limit is a rendering/output resource
+    bound. It is not an analytical threshold.
+    """
+
+    if point_limit < 4:
         raise ValueError(
-            "point_limit must be at least 2"
+            "point_limit must be at least 4 "
+            "for temporal display projection"
         )
 
     column_names = (
@@ -321,8 +345,12 @@ def _execute_with_context(
         last_epoch,
     ) = bounds
 
+    usable_observation_count = int(
+        usable_observation_count
+    )
+
     source_result = {
-        "usable_observation_count": int(
+        "usable_observation_count": (
             usable_observation_count
         ),
         "first_observation": (
@@ -349,14 +377,12 @@ def _execute_with_context(
             "result_kind": (
                 "long_temporal_series_projection"
             ),
-
             "temporal_column_index": (
                 temporal_column_index
             ),
             "temporal_column_name": (
                 temporal_column_name
             ),
-
             "value_column_index": (
                 value_column_index
             ),
@@ -366,24 +392,24 @@ def _execute_with_context(
             "value_technical_type": (
                 value_column_type
             ),
-
-            "source": source_result,
-
+            "source": (
+                source_result
+            ),
             "display_projection": {
                 "mode": "empty",
                 "point_limit": (
                     point_limit
                 ),
                 "point_count": 0,
+                "bucket_count": None,
                 "bucket_width_seconds": (
                     None
                 ),
                 "points": [],
             },
-
             "execution": {
                 "mode": (
-                    "duckdb_aggregate_projection"
+                    "duckdb_temporal_display_projection"
                 ),
                 "temporal_display_order": (
                     "parsed_time_ascending"
@@ -392,6 +418,12 @@ def _execute_with_context(
                 "point_limit": (
                     point_limit
                 ),
+                "limitations": [
+                    (
+                        "Display projection is not "
+                        "the analytical observation series."
+                    ),
+                ],
             },
         }
 
@@ -405,9 +437,9 @@ def _execute_with_context(
             SELECT
                 parsed_time,
                 COUNT(*) AS row_count,
-                AVG(value),
-                MIN(value),
-                MAX(value)
+                AVG(value) AS mean_value,
+                MIN(value) AS minimum_value,
+                MAX(value) AS maximum_value
 
             FROM valid
 
@@ -436,9 +468,9 @@ def _execute_with_context(
                 SELECT
                     parsed_time,
                     COUNT(*) AS row_count,
-                    AVG(value),
-                    MIN(value),
-                    MAX(value)
+                    AVG(value) AS mean_value,
+                    MIN(value) AS minimum_value,
+                    MAX(value) AS maximum_value
 
                 FROM valid
 
@@ -455,47 +487,137 @@ def _execute_with_context(
             )
 
         else:
+            # A bucket may contribute at most four actual
+            # representative observations:
+            #
+            # first / minimum / maximum / last
+            #
+            # Therefore the number of buckets is derived from
+            # the rendering point limit rather than treating
+            # point_limit as the bucket count.
+            bucket_count = max(
+                1,
+                point_limit // 4,
+            )
+
             bucket_width_seconds = (
                 span_seconds
-                / point_limit
+                / bucket_count
             )
 
             bucket_rows = (
                 connection.execute(
                     normalized_sql
                     + """
-                    SELECT
-                        LEAST(
-                            ?,
-                            GREATEST(
-                                0,
-                                CAST(
-                                    FLOOR(
-                                        (
-                                            EPOCH(
-                                                parsed_time
+                    , bucketed AS (
+                        SELECT
+                            LEAST(
+                                ?,
+                                GREATEST(
+                                    0,
+                                    CAST(
+                                        FLOOR(
+                                            (
+                                                EPOCH(
+                                                    parsed_time
+                                                )
+                                                - ?
                                             )
-                                            - ?
+                                            / ?
                                         )
-                                        / ?
+                                        AS INTEGER
                                     )
-                                    AS INTEGER
                                 )
-                            )
-                        ) AS bucket_index,
+                            ) AS bucket_index,
+
+                            parsed_time,
+                            value
+
+                        FROM valid
+                    ),
+
+                    ranked AS (
+                        SELECT
+                            bucket_index,
+                            parsed_time,
+                            value,
+
+                            ROW_NUMBER() OVER (
+                                PARTITION BY bucket_index
+                                ORDER BY
+                                    parsed_time ASC,
+                                    value ASC
+                            ) AS first_rank,
+
+                            ROW_NUMBER() OVER (
+                                PARTITION BY bucket_index
+                                ORDER BY
+                                    value ASC,
+                                    parsed_time ASC
+                            ) AS minimum_rank,
+
+                            ROW_NUMBER() OVER (
+                                PARTITION BY bucket_index
+                                ORDER BY
+                                    value DESC,
+                                    parsed_time ASC
+                            ) AS maximum_rank,
+
+                            ROW_NUMBER() OVER (
+                                PARTITION BY bucket_index
+                                ORDER BY
+                                    parsed_time DESC,
+                                    value ASC
+                            ) AS last_rank
+
+                        FROM bucketed
+                    )
+
+                    SELECT
+                        bucket_index,
 
                         COUNT(*) AS row_count,
-                        AVG(value),
-                        MIN(value),
-                        MAX(value)
+                        AVG(value) AS mean_value,
+                        MIN(value) AS minimum_value,
+                        MAX(value) AS maximum_value,
 
-                    FROM valid
+                        MIN(parsed_time)
+                            FILTER (
+                                WHERE first_rank = 1
+                            ) AS first_time,
+
+                        MIN(value)
+                            FILTER (
+                                WHERE first_rank = 1
+                            ) AS first_value,
+
+                        MIN(parsed_time)
+                            FILTER (
+                                WHERE minimum_rank = 1
+                            ) AS minimum_time,
+
+                        MIN(parsed_time)
+                            FILTER (
+                                WHERE maximum_rank = 1
+                            ) AS maximum_time,
+
+                        MIN(parsed_time)
+                            FILTER (
+                                WHERE last_rank = 1
+                            ) AS last_time,
+
+                        MIN(value)
+                            FILTER (
+                                WHERE last_rank = 1
+                            ) AS last_value
+
+                    FROM ranked
 
                     GROUP BY bucket_index
                     ORDER BY bucket_index
                     """,
                     [
-                        point_limit - 1,
+                        bucket_count - 1,
                         float(first_epoch),
                         bucket_width_seconds,
                     ],
@@ -503,32 +625,39 @@ def _execute_with_context(
             )
 
             display_projection = (
-                build_time_bucket_projection(
-                    bucket_rows=bucket_rows,
+                build_time_bucket_extrema_projection(
+                    bucket_rows=(
+                        bucket_rows
+                    ),
                     first_observation=(
                         first_observation
+                    ),
+                    last_observation=(
+                        last_observation
                     ),
                     bucket_width_seconds=(
                         bucket_width_seconds
                     ),
-                    point_limit=point_limit,
+                    bucket_count=(
+                        bucket_count
+                    ),
+                    point_limit=(
+                        point_limit
+                    ),
                 )
             )
 
     return {
         "status": "measured",
-
         "result_kind": (
             "long_temporal_series_projection"
         ),
-
         "temporal_column_index": (
             temporal_column_index
         ),
         "temporal_column_name": (
             temporal_column_name
         ),
-
         "value_column_index": (
             value_column_index
         ),
@@ -538,30 +667,30 @@ def _execute_with_context(
         "value_technical_type": (
             value_column_type
         ),
-
-        "source": source_result,
-
+        "source": (
+            source_result
+        ),
         "display_projection": (
             display_projection
         ),
-
         "execution": {
             "mode": (
-                "duckdb_aggregate_projection"
+                "duckdb_temporal_display_projection"
             ),
 
-            # Display projection intentionally orders by
-            # normalized temporal value. This is separate
-            # from the observed source/relation order used
-            # by continuity analysis.
+            # Display projection intentionally uses normalized
+            # chronological time. This is independent of the
+            # observed relation order used by continuity
+            # analysis.
             "temporal_display_order": (
                 "parsed_time_ascending"
             ),
 
             "source_order_used": False,
 
-            # Resource/output bound only. It does not limit
-            # analytical observation processing.
+            # Rendering/output resource bound only.
+            # It does not limit analytical observation
+            # processing.
             "point_limit": (
                 point_limit
             ),
@@ -572,13 +701,14 @@ def _execute_with_context(
                     "the analytical observation series."
                 ),
                 (
-                    "Time buckets may aggregate "
-                    "multiple source observations."
+                    "Large temporal series are reduced "
+                    "for display while preserving selected "
+                    "first, minimum, maximum and last "
+                    "source observations per time bucket."
                 ),
             ],
         },
     }
-
 
 def execute_long_temporal_series_projection(
     file_path: str,
