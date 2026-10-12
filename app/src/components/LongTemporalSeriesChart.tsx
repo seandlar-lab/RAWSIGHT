@@ -372,14 +372,6 @@ function BucketOverview({
                 ),
             )
             : null;
-    const selectedRangeCenterX =
-        selectedStartX !== null &&
-            selectedEndX !== null
-            ? (
-                selectedStartX +
-                selectedEndX
-            ) / 2
-            : null;
 
     function yForValue(
         value: number,
@@ -854,55 +846,15 @@ function BucketOverview({
                 )}
 
                 {selectedRangeX !== null &&
-                    selectedRangeWidth !== null &&
-                    selectedRangeCenterX !== null && (
-                        <>
-                            <rect
-                                x={selectedRangeX}
-                                y={padding.top}
-                                width={selectedRangeWidth}
-                                height={plotHeight}
-                                fill="currentColor"
-                                opacity="0.12"
-                            />
-
-                            <line
-                                x1={selectedRangeCenterX}
-                                y1={padding.top}
-                                x2={selectedRangeCenterX}
-                                y2={
-                                    height -
-                                    padding.bottom
-                                }
-                                stroke="currentColor"
-                                strokeWidth="3"
-                                opacity="0.8"
-                                vectorEffect={
-                                    "non-scaling-stroke"
-                                }
-                            />
-
-                            <polygon
-                                points={
-                                    `${selectedRangeCenterX - 9},${padding.top - 10} ` +
-                                    `${selectedRangeCenterX + 9},${padding.top - 10} ` +
-                                    `${selectedRangeCenterX},${padding.top + 2}`
-                                }
-                                fill="currentColor"
-                                opacity="0.9"
-                            />
-
-                            <circle
-                                cx={selectedRangeCenterX}
-                                cy={
-                                    height -
-                                    padding.bottom
-                                }
-                                r="5"
-                                fill="currentColor"
-                                opacity="0.9"
-                            />
-                        </>
+                    selectedRangeWidth !== null && (
+                        <rect
+                            x={selectedRangeX}
+                            y={padding.top}
+                            width={selectedRangeWidth}
+                            height={plotHeight}
+                            fill="currentColor"
+                            opacity="0.10"
+                        />
                     )}
 
                 {minimumSegments.map(
@@ -1067,6 +1019,72 @@ function BucketOverview({
                     </strong>
                 </span>
             </div>
+
+            {selectedRangeX !== null &&
+                selectedRangeWidth !== null && (
+                    <svg
+                        viewBox={
+                            `0 0 ${width} 72`
+                        }
+                        aria-hidden="true"
+                        style={{
+                            width: "100%",
+                            height: "72px",
+                            display: "block",
+                            overflow: "visible",
+                            marginTop: "-4px",
+                            marginBottom: "-4px",
+                        }}
+                    >
+                        <line
+                            x1={selectedRangeX}
+                            y1="0"
+                            x2={padding.left}
+                            y2="64"
+                            stroke="currentColor"
+                            strokeWidth="1.5"
+                            opacity="0.35"
+                            vectorEffect={
+                                "non-scaling-stroke"
+                            }
+                        />
+
+                        <line
+                            x1={
+                                selectedRangeX +
+                                selectedRangeWidth
+                            }
+                            y1="0"
+                            x2={
+                                width -
+                                padding.right
+                            }
+                            y2="64"
+                            stroke="currentColor"
+                            strokeWidth="1.5"
+                            opacity="0.35"
+                            vectorEffect={
+                                "non-scaling-stroke"
+                            }
+                        />
+
+                        <line
+                            x1={selectedRangeX}
+                            y1="0"
+                            x2={
+                                selectedRangeX +
+                                selectedRangeWidth
+                            }
+                            y2="0"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            opacity="0.55"
+                            vectorEffect={
+                                "non-scaling-stroke"
+                            }
+                        />
+                    </svg>
+                )}
         </div>
     );
 }
