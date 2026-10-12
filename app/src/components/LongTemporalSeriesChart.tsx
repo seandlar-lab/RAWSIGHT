@@ -100,7 +100,23 @@ export function LongTemporalSeriesChart({
         result.display_projection.buckets ?? [];
 
     if (buckets.length === 0) {
+        const isDetail =
+            result.result_kind ===
+            "long_temporal_series_detail";
+
+        const requestedRange =
+            "requested_range" in result
+                ? result.requested_range
+                : null;
+
+        const isSameDate =
+            requestedRange !== null &&
+            requestedRange.start.slice(0, 10) !== "" &&
+            requestedRange.start.slice(0, 10) ===
+            requestedRange.end.slice(0, 10);
+
         const points: TimeSeriesPoint[] =
+
             result.display_projection.points.map(
                 (point) => ({
                     index:
@@ -108,7 +124,15 @@ export function LongTemporalSeriesChart({
                     label:
                         point.time,
                     axisLabel:
-                        point.time.slice(0, 10),
+                        isDetail && isSameDate
+                            ? point.time
+                                .replace("T", " ")
+                                .slice(11, 19)
+                            : isDetail
+                                ? point.time
+                                    .replace("T", " ")
+                                    .slice(5, 16)
+                                : point.time.slice(0, 10),
                     value:
                         finiteOrNull(point.value),
                     xPosition:
@@ -168,6 +192,10 @@ function BucketOverview({
 }) {
     const width = 1440;
     const height = 520;
+
+    const isDetail =
+        result.result_kind ===
+        "long_temporal_series_detail";
 
     const padding = {
         left: 92,
@@ -606,7 +634,9 @@ function BucketOverview({
                 }}
             >
                 <strong>
-                    Temporal overview
+                    {isDetail
+                        ? "Temporal detail"
+                        : "Temporal overview"}
                 </strong>
 
                 <span>
