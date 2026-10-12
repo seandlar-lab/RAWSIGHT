@@ -2841,6 +2841,19 @@ function App() {
                                             </strong>
                                           </span>
                                         </div>
+                                        {longTemporalSeries.execution
+                                          .limitations.length > 0 && (
+                                            <div className="analysis-group-content">
+                                              {longTemporalSeries.execution
+                                                .limitations.map(
+                                                  (limitation) => (
+                                                    <span key={limitation}>
+                                                      {limitation}
+                                                    </span>
+                                                  ),
+                                                )}
+                                            </div>
+                                          )}
 
                                         <LongTemporalSeriesChart
                                           result={longTemporalSeries}
@@ -2905,19 +2918,6 @@ function App() {
                                           </div>
                                         )}
 
-                                        {longTemporalSeries.execution
-                                          .limitations.length > 0 && (
-                                            <div className="analysis-group-content">
-                                              {longTemporalSeries.execution
-                                                .limitations.map(
-                                                  (limitation) => (
-                                                    <span key={limitation}>
-                                                      {limitation}
-                                                    </span>
-                                                  ),
-                                                )}
-                                            </div>
-                                          )}
                                       </div>
                                     )}
                                   </div>
