@@ -31,6 +31,17 @@ export type LongTemporalSeriesSource = {
   last_observation: string | null;
 };
 
+export type LongTemporalSeriesDetailSource = {
+  matching_observation_count: number;
+  first_observation: string | null;
+  last_observation: string | null;
+};
+
+export type LongTemporalSeriesRequestedRange = {
+  start: string;
+  end: string;
+};
+
 export type LongTemporalSeriesDisplayProjection = {
   mode: string;
   point_limit: number;
@@ -62,6 +73,28 @@ export type LongTemporalSeriesResult = {
   value_technical_type: string;
 
   source: LongTemporalSeriesSource;
+
+  display_projection:
+  LongTemporalSeriesDisplayProjection;
+
+  execution: LongTemporalSeriesExecution;
+};
+
+export type LongTemporalSeriesDetailResult = {
+  status: string;
+  result_kind: string;
+
+  temporal_column_index: number;
+  temporal_column_name: string;
+
+  value_column_index: number;
+  value_column_name: string;
+  value_technical_type: string;
+
+  requested_range:
+  LongTemporalSeriesRequestedRange;
+
+  source: LongTemporalSeriesDetailSource;
 
   display_projection:
   LongTemporalSeriesDisplayProjection;

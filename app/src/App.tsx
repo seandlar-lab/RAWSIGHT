@@ -15,6 +15,7 @@ import type {
 import { RawAnalysisVisualization } from "./components/RawAnalysisVisualization";
 import { WideTemporalSeriesDetailPanel } from "./components/WideTemporalSeriesDetailPanel";
 import type {
+  LongTemporalSeriesDetailResult,
   LongTemporalSeriesResult,
 } from "./types/longTemporalSeries";
 import {
@@ -518,6 +519,21 @@ function App() {
   ] = useState(false);
 
   const [
+    longTemporalSeriesDetail,
+    setLongTemporalSeriesDetail,
+  ] = useState<LongTemporalSeriesDetailResult | null>(
+    null,
+  );
+
+  const [
+    isLoadingLongTemporalSeriesDetail,
+    setIsLoadingLongTemporalSeriesDetail,
+  ] = useState(false);
+
+  const longTemporalDetailRequestIdRef =
+    useRef(0);
+
+  const [
     wideTemporalSeriesClassification,
     setWideTemporalSeriesClassification,
   ] = useState("");
@@ -641,6 +657,10 @@ function App() {
   }, []);
 
   useEffect(() => {
+    longTemporalDetailRequestIdRef.current += 1;
+    setLongTemporalSeriesDetail(null);
+    setIsLoadingLongTemporalSeriesDetail(false);
+
     wideTemporalReferenceRequestIdRef.current += 1;
     wideTemporalComparisonRequestIdRef.current += 1;
 
@@ -1588,6 +1608,10 @@ function App() {
           rawResult,
         ) as LongTemporalSeriesResult;
 
+      longTemporalDetailRequestIdRef.current += 1;
+      setLongTemporalSeriesDetail(null);
+      setIsLoadingLongTemporalSeriesDetail(false);
+
       /*
        * Replace the displayed series only
        * after the new series has loaded
@@ -1611,6 +1635,129 @@ function App() {
       setIsLoadingLongTemporalSeries(
         false,
       );
+    }
+  }
+  async function loadLongTemporalSeriesDetail(
+    valueColumnName: string,
+    startTime: string,
+    endTime: string,
+  ): Promise<LongTemporalSeriesDetailResult | null> {
+    if (!fileInfo || !longTemporalSeries) {
+      return null;
+    }
+
+    if (
+      longTemporalSeries.value_column_name !==
+      valueColumnName
+    ) {
+      setError(
+        "Temporal detail must belong to the currently displayed value field.",
+      );
+      return null;
+    }
+
+    if (!startTime || !endTime) {
+      setError(
+        "Temporal detail requires a start and end time.",
+      );
+      return null;
+    }
+
+    if (
+      longTemporalSeriesDetail &&
+      longTemporalSeriesDetail.value_column_name ===
+      valueColumnName &&
+      longTemporalSeriesDetail.requested_range.start ===
+      startTime &&
+      longTemporalSeriesDetail.requested_range.end ===
+      endTime
+    ) {
+      return longTemporalSeriesDetail;
+    }
+
+    const temporalAxis =
+      profile?.structural_model
+        ?.logical_structure
+        ?.temporal_axis;
+
+    if (
+      !temporalAxis ||
+      temporalAxis.orientation !== "vertical"
+    ) {
+      setError(
+        "Temporal detail requires the vertical temporal axis established by Light Analysis.",
+      );
+      return null;
+    }
+
+    const sourcePath =
+      fileInfo.path;
+
+    const temporalAxisJson =
+      JSON.stringify(temporalAxis);
+
+    const requestId =
+      ++longTemporalDetailRequestIdRef.current;
+
+    setIsLoadingLongTemporalSeriesDetail(true);
+    setError(null);
+
+    try {
+      const rawResult = await invoke<string>(
+        "explore_long_temporal_series_detail",
+        {
+          path: sourcePath,
+          temporalAxisJson,
+          valueColumnName,
+          startTime,
+          endTime,
+          pointLimit: 1000,
+        },
+      );
+
+      const parsedResult = JSON.parse(
+        rawResult,
+      ) as LongTemporalSeriesDetailResult;
+
+      if (
+        requestId !==
+        longTemporalDetailRequestIdRef.current
+      ) {
+        return null;
+      }
+
+      if (
+        parsedResult.value_column_name !==
+        valueColumnName
+      ) {
+        throw new Error(
+          "Temporal detail returned a different value field than requested.",
+        );
+      }
+
+      setLongTemporalSeriesDetail(
+        parsedResult,
+      );
+
+      return parsedResult;
+    } catch (err) {
+      if (
+        requestId ===
+        longTemporalDetailRequestIdRef.current
+      ) {
+        setError(String(err));
+      }
+
+      return null;
+    } finally {
+      if (
+        requestId ===
+        longTemporalDetailRequestIdRef.current
+      ) {
+        setIsLoadingLongTemporalSeriesDetail(
+          false,
+        );
+      }
     }
   }
   async function inspectDatasetStructure(path: string) {
@@ -2697,7 +2844,66 @@ function App() {
 
                                         <LongTemporalSeriesChart
                                           result={longTemporalSeries}
+                                          selectedRange={
+                                            longTemporalSeriesDetail
+                                              ?.requested_range ?? null
+                                          }
+                                          onSelectBucket={(bucket) => {
+                                            void loadLongTemporalSeriesDetail(
+                                              longTemporalSeries.value_column_name,
+                                              bucket.bucket_start,
+                                              bucket.bucket_end,
+                                            );
+                                          }}
                                         />
+
+                                        {isLoadingLongTemporalSeriesDetail && (
+                                          <div className="analysis-group-content">
+                                            <span>
+                                              Loading selected temporal interval...
+                                            </span>
+                                          </div>
+                                        )}
+
+                                        {longTemporalSeriesDetail && (
+                                          <div
+                                            style={{
+                                              display: "grid",
+                                              gap: "12px",
+                                            }}
+                                          >
+                                            <div className="analysis-group-content">
+                                              <span>
+                                                Selected interval{" "}
+                                                <strong>
+                                                  {longTemporalSeriesDetail.requested_range.start}
+                                                  {" -> "}
+                                                  {longTemporalSeriesDetail.requested_range.end}
+                                                </strong>
+                                              </span>
+
+                                              <span>
+                                                Matching observations{" "}
+                                                <strong>
+                                                  {longTemporalSeriesDetail.source
+                                                    .matching_observation_count
+                                                    .toLocaleString()}
+                                                </strong>
+                                              </span>
+                                            </div>
+
+                                            <LongTemporalSeriesChart
+                                              result={longTemporalSeriesDetail}
+                                              onSelectBucket={(bucket) => {
+                                                void loadLongTemporalSeriesDetail(
+                                                  longTemporalSeriesDetail.value_column_name,
+                                                  bucket.bucket_start,
+                                                  bucket.bucket_end,
+                                                );
+                                              }}
+                                            />
+                                          </div>
+                                        )}
 
                                         {longTemporalSeries.execution
                                           .limitations.length > 0 && (

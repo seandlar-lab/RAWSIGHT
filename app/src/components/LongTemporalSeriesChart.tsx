@@ -5,6 +5,8 @@ import {
 
 import type {
     LongTemporalSeriesBucket,
+    LongTemporalSeriesDetailResult,
+    LongTemporalSeriesRequestedRange,
     LongTemporalSeriesResult,
 } from "../types/longTemporalSeries";
 
@@ -16,9 +18,19 @@ import type {
     TimeSeriesPoint,
 } from "../visualization";
 
+type LongTemporalSeriesChartResult =
+    | LongTemporalSeriesResult
+    | LongTemporalSeriesDetailResult;
 
 type Props = {
-    result: LongTemporalSeriesResult;
+    result: LongTemporalSeriesChartResult;
+
+    onSelectBucket?: (
+        bucket: LongTemporalSeriesBucket,
+    ) => void;
+
+    selectedRange?:
+    LongTemporalSeriesRequestedRange | null;
 };
 
 
@@ -81,6 +93,8 @@ function bucketMidpoint(
 
 export function LongTemporalSeriesChart({
     result,
+    onSelectBucket,
+    selectedRange = null,
 }: Props) {
     const buckets =
         result.display_projection.buckets ?? [];
@@ -129,6 +143,8 @@ export function LongTemporalSeriesChart({
         <BucketOverview
             result={result}
             buckets={buckets}
+            onSelectBucket={onSelectBucket}
+            selectedRange={selectedRange}
         />
     );
 }
@@ -137,9 +153,18 @@ export function LongTemporalSeriesChart({
 function BucketOverview({
     result,
     buckets,
+    onSelectBucket,
+    selectedRange,
 }: {
-    result: LongTemporalSeriesResult;
+    result: LongTemporalSeriesChartResult;
     buckets: LongTemporalSeriesBucket[];
+
+    onSelectBucket?: (
+        bucket: LongTemporalSeriesBucket,
+    ) => void;
+
+    selectedRange:
+    LongTemporalSeriesRequestedRange | null;
 }) {
     const width = 1440;
     const height = 520;
@@ -290,6 +315,71 @@ function BucketOverview({
             plotWidth
         );
     }
+
+    function clampPlotX(
+        value: number,
+    ): number {
+        return Math.max(
+            padding.left,
+            Math.min(
+                width - padding.right,
+                value,
+            ),
+        );
+    }
+
+    const selectedStartTime =
+        selectedRange
+            ? Date.parse(selectedRange.start)
+            : Number.NaN;
+
+    const selectedEndTime =
+        selectedRange
+            ? Date.parse(selectedRange.end)
+            : Number.NaN;
+
+    const selectedStartX =
+        Number.isFinite(selectedStartTime)
+            ? clampPlotX(
+                xForTime(selectedStartTime),
+            )
+            : null;
+
+    const selectedEndX =
+        Number.isFinite(selectedEndTime)
+            ? clampPlotX(
+                xForTime(selectedEndTime),
+            )
+            : null;
+
+    const selectedRangeX =
+        selectedStartX !== null &&
+            selectedEndX !== null
+            ? Math.min(
+                selectedStartX,
+                selectedEndX,
+            )
+            : null;
+
+    const selectedRangeWidth =
+        selectedStartX !== null &&
+            selectedEndX !== null
+            ? Math.max(
+                2,
+                Math.abs(
+                    selectedEndX -
+                    selectedStartX,
+                ),
+            )
+            : null;
+    const selectedRangeCenterX =
+        selectedStartX !== null &&
+            selectedEndX !== null
+            ? (
+                selectedStartX +
+                selectedEndX
+            ) / 2
+            : null;
 
     function yForValue(
         value: number,
@@ -648,6 +738,16 @@ function BucketOverview({
                 onPointerMove={
                     handlePointerMove
                 }
+                onClick={() => {
+                    if (
+                        hovered &&
+                        onSelectBucket
+                    ) {
+                        onSelectBucket(
+                            hovered.bucket,
+                        );
+                    }
+                }}
                 onPointerLeave={
                     () =>
                         setHoverIndex(null)
@@ -660,7 +760,9 @@ function BucketOverview({
                     height: "auto",
                     minHeight: "360px",
                     overflow: "visible",
-                    cursor: "crosshair",
+                    cursor: onSelectBucket
+                        ? "pointer"
+                        : "crosshair",
                 }}
             >
                 <line
@@ -750,6 +852,58 @@ function BucketOverview({
                         </g>
                     ),
                 )}
+
+                {selectedRangeX !== null &&
+                    selectedRangeWidth !== null &&
+                    selectedRangeCenterX !== null && (
+                        <>
+                            <rect
+                                x={selectedRangeX}
+                                y={padding.top}
+                                width={selectedRangeWidth}
+                                height={plotHeight}
+                                fill="currentColor"
+                                opacity="0.12"
+                            />
+
+                            <line
+                                x1={selectedRangeCenterX}
+                                y1={padding.top}
+                                x2={selectedRangeCenterX}
+                                y2={
+                                    height -
+                                    padding.bottom
+                                }
+                                stroke="currentColor"
+                                strokeWidth="3"
+                                opacity="0.8"
+                                vectorEffect={
+                                    "non-scaling-stroke"
+                                }
+                            />
+
+                            <polygon
+                                points={
+                                    `${selectedRangeCenterX - 9},${padding.top - 10} ` +
+                                    `${selectedRangeCenterX + 9},${padding.top - 10} ` +
+                                    `${selectedRangeCenterX},${padding.top + 2}`
+                                }
+                                fill="currentColor"
+                                opacity="0.9"
+                            />
+
+                            <circle
+                                cx={selectedRangeCenterX}
+                                cy={
+                                    height -
+                                    padding.bottom
+                                }
+                                r="5"
+                                fill="currentColor"
+                                opacity="0.9"
+                            />
+                        </>
+                    )}
 
                 {minimumSegments.map(
                     (segment, index) => (
