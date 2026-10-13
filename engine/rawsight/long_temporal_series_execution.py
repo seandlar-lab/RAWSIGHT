@@ -857,6 +857,7 @@ def _build_exact_detail_projection(
 def _execute_detail_with_context(
     source_context: SourceExecutionContext,
     temporal_axis: dict[str, Any],
+    continuity: dict[str, Any] | None,
     value_column_name: str,
     start_time: str,
     end_time: str,
@@ -1458,6 +1459,7 @@ def _execute_detail_with_context(
 def execute_long_temporal_series_detail(
     file_path: str,
     temporal_axis: dict[str, Any],
+    continuity: dict[str, Any] | None,
     value_column_name: str,
     start_time: str,
     end_time: str,
@@ -1471,7 +1473,8 @@ def execute_long_temporal_series_detail(
     observations inside one requested time interval.
 
     Detection and normalization are not repeated here.
-    The caller supplies the established vertical temporal axis.
+    The caller supplies the established vertical temporal axis
+    and continuity evidence from Light Analysis.
 
     point_limit controls only the returned display projection.
     It is not an analytical acceptance threshold.
@@ -1491,6 +1494,7 @@ def execute_long_temporal_series_detail(
         return _execute_detail_with_context(
             source_context=source_context,
             temporal_axis=temporal_axis,
+            continuity=continuity,
             value_column_name=(
                 value_column_name
             ),
@@ -1505,6 +1509,7 @@ def execute_long_temporal_series_detail(
         return _execute_detail_with_context(
             source_context=owned_context,
             temporal_axis=temporal_axis,
+            continuity=continuity,
             value_column_name=(
                 value_column_name
             ),

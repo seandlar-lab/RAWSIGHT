@@ -479,16 +479,17 @@ def _run_long_temporal_series_detail_context(
     Build a temporal detail view from original observations
     inside one caller-selected time interval.
 
-    Temporal structure is supplied by Light Analysis and is not
-    detected again here.
+    Temporal structure and continuity evidence are supplied by
+    Light Analysis and are not detected again here.
 
     point_limit is a display/output resource bound only.
     """
 
-    if len(arguments) != 7:
+    if len(arguments) != 8:
         raise ValueError(
             "long-temporal-series-detail-context requires: "
             "<path> <temporal_axis_json> "
+            "<continuity_json> "
             "<value_column_name> "
             "<start_time> <end_time> <point_limit>"
         )
@@ -502,8 +503,21 @@ def _run_long_temporal_series_detail_context(
         )
     )
 
-    value_column_name = (
+    continuity = json.loads(
         arguments[3]
+    )
+
+    if (
+        continuity is not None
+        and not isinstance(continuity, dict)
+    ):
+        raise ValueError(
+            "continuity_json must contain "
+            "an object or null"
+        )
+
+    value_column_name = (
+        arguments[4]
     )
 
     if not value_column_name:
@@ -511,8 +525,8 @@ def _run_long_temporal_series_detail_context(
             "Value column name is required"
         )
 
-    start_time = arguments[4]
-    end_time = arguments[5]
+    start_time = arguments[5]
+    end_time = arguments[6]
 
     if not start_time:
         raise ValueError(
@@ -525,13 +539,14 @@ def _run_long_temporal_series_detail_context(
         )
 
     point_limit = int(
-        arguments[6]
+        arguments[7]
     )
 
     return (
         execute_long_temporal_series_detail(
             file_path=file_path,
             temporal_axis=temporal_axis,
+            continuity=continuity,
             value_column_name=(
                 value_column_name
             ),

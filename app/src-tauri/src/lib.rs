@@ -352,6 +352,7 @@ fn explore_long_temporal_series(
 fn explore_long_temporal_series_detail(
     path: String,
     temporal_axis_json: String,
+    continuity_json: String,
     value_column_name: String,
     start_time: String,
     end_time: String,
@@ -361,6 +362,7 @@ fn explore_long_temporal_series_detail(
         "long-temporal-series-detail-context".to_string(),
         path,
         temporal_axis_json,
+        continuity_json,
         value_column_name,
         start_time,
         end_time,

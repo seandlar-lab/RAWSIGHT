@@ -1708,6 +1708,9 @@ function App() {
         {
           path: sourcePath,
           temporalAxisJson,
+          continuityJson: JSON.stringify(
+            profile?.long_temporal?.continuity ?? null,
+          ),
           valueColumnName,
           startTime,
           endTime,
