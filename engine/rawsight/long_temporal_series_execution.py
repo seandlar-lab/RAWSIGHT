@@ -853,6 +853,60 @@ def _build_exact_detail_projection(
         "points": points,
     }
 
+def _select_detail_continuity_evidence(
+    connection: Any,
+    continuity: dict[str, Any] | None,
+    requested_start: Any,
+    requested_end: Any,
+) -> dict[str, Any]:
+    """
+    Select existing continuity evidence overlapping
+    the requested detail interval.
+
+    No new continuity detection is performed here.
+    """
+
+    intervals = (
+        continuity.get("largest_positive_intervals", [])
+        if continuity is not None
+        else []
+    )
+
+    selected = []
+
+    for interval in intervals:
+        from_value = interval.get("from_value")
+        to_value = interval.get("to_value")
+
+        if not from_value or not to_value:
+            continue
+
+        parsed = connection.execute(
+            """
+            SELECT
+                TRY_CAST(? AS TIMESTAMP),
+                TRY_CAST(? AS TIMESTAMP)
+            """,
+            [from_value, to_value],
+        ).fetchone()
+
+        interval_start, interval_end = parsed
+
+        if interval_start is None or interval_end is None:
+            continue
+
+        if (
+            interval_start <= requested_end
+            and interval_end >= requested_start
+        ):
+            selected.append(interval)
+
+    return {
+        "source": "long_temporal.continuity",
+        "selection": "overlapping_intervals",
+        "bounded": True,
+        "intervals": selected,
+    }
 
 def _execute_detail_with_context(
     source_context: SourceExecutionContext,
@@ -1000,6 +1054,15 @@ def _execute_detail_with_context(
             "equal to start_time"
         )
 
+    continuity_evidence = (
+        _select_detail_continuity_evidence(
+            connection=connection,
+            continuity=continuity,
+            requested_start=requested_start,
+            requested_end=requested_end,
+        )
+    )
+
     view = _quote_identifier(
         source_context.view_name
     )
@@ -1146,6 +1209,7 @@ def _execute_detail_with_context(
             "source": (
                 source_result
             ),
+            "continuity_evidence": continuity_evidence,
             "display_projection": {
                 "mode": "empty",
                 "point_limit": (
@@ -1432,9 +1496,10 @@ def _execute_detail_with_context(
         "requested_range": (
             requested_range
         ),
-        "source": (
+         "source": (
             source_result
         ),
+        "continuity_evidence": continuity_evidence,
         "display_projection": (
             display_projection
         ),
