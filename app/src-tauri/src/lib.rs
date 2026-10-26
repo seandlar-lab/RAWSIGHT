@@ -376,6 +376,27 @@ fn explore_long_temporal_series_detail(
 }
 
 #[tauri::command(async)]
+fn explore_cross_series_presence(
+    path: String,
+    temporal_axis_json: String,
+    start_time: String,
+    end_time: String,
+) -> Result<String, String> {
+    let arguments = vec![
+        "cross-series-presence-context".to_string(),
+        path,
+        temporal_axis_json,
+        start_time,
+        end_time,
+    ];
+
+    run_profile_json_command(
+        &arguments,
+        "Cross-series presence",
+    )
+}
+
+#[tauri::command(async)]
 fn explore_wide_temporal_reference(
     path: String,
     temporal_axis_json: String,
@@ -1063,6 +1084,7 @@ pub fn run() {
             explore_wide_temporal_series_detail,
             explore_long_temporal_series,
             explore_long_temporal_series_detail,
+            explore_cross_series_presence,
             explore_wide_temporal_reference,
             explore_wide_temporal_reference_comparison,
 			raw_analysis_dataset,

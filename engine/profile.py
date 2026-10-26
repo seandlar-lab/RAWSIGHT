@@ -556,6 +556,49 @@ def _run_long_temporal_series_detail_context(
         )
     )
 
+def _run_cross_series_presence_context(
+    arguments: list[str],
+) -> dict:
+    """
+    Analyze numeric column presence in one selected
+    temporal interval using the established temporal axis.
+    """
+
+    if len(arguments) != 5:
+        raise ValueError(
+            "cross-series-presence-context requires: "
+            "<path> <temporal_axis_json> "
+            "<start_time> <end_time>"
+        )
+
+    from rawsight.cross_series_presence import (
+        analyze_cross_series_presence,
+    )
+    from rawsight.source_context import (
+        SourceExecutionContext,
+    )
+
+    file_path = arguments[1]
+
+    temporal_axis = (
+        _validated_temporal_axis_from_json(
+            arguments[2],
+            expected_orientation="vertical",
+        )
+    )
+
+    start_time = arguments[3]
+    end_time = arguments[4]
+
+    with SourceExecutionContext(file_path) as context:
+        return analyze_cross_series_presence(
+            source_context=context,
+            temporal_axis=temporal_axis,
+            start_time=start_time,
+            end_time=end_time,
+        )
+
+
 def main(arguments: list[str]) -> int:
     """
     Backward-compatible engine entrypoint.
@@ -608,6 +651,10 @@ def main(arguments: list[str]) -> int:
             )
         )
 
+    elif command == "cross-series-presence-context":
+        result = _run_cross_series_presence_context(
+            arguments
+        )
     elif command == "wide-temporal-series-page":
         result = (
             _run_wide_temporal_series_page(
