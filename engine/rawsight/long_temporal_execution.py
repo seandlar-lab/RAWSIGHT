@@ -124,7 +124,7 @@ def execute_long_temporal_axis_analysis(
     if not source_context.is_open:
         raise RuntimeError(
         "Supplied SourceExecutionContext "
-        "must already be open"
+            "must already be open"
         )
 
     column_names = (
