@@ -334,7 +334,7 @@ def analyze_long_temporal_axis(
                 / positive_adjacent_intervals
             )
     
-        retained_largest_intervals = []
+    retained_largest_intervals = []
 
     for (
         interval_seconds,
