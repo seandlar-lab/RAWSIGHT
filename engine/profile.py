@@ -599,6 +599,28 @@ def _run_cross_series_presence_context(
         )
 
 
+def _run_episode_discovery_context(arguments: list[str]) -> dict:
+    """Run bounded original-observation discovery using detected temporal axis."""
+    if len(arguments) != 6:
+        raise ValueError(
+            "episode-discovery-context requires: "
+            "<path> <temporal_axis_json> <start_time> <end_time> "
+            "<expected_interval_seconds>"
+        )
+    from rawsight.episode_discovery_execution import execute_episode_discovery
+
+    temporal_axis = _validated_temporal_axis_from_json(
+        arguments[2], expected_orientation="vertical"
+    )
+    return execute_episode_discovery(
+        file_path=arguments[1],
+        temporal_axis=temporal_axis,
+        start_time=arguments[3],
+        end_time=arguments[4],
+        expected_interval_seconds=float(arguments[5]),
+    )
+
+
 def main(arguments: list[str]) -> int:
     """
     Backward-compatible engine entrypoint.
@@ -655,6 +677,8 @@ def main(arguments: list[str]) -> int:
         result = _run_cross_series_presence_context(
             arguments
         )
+    elif command == "episode-discovery-context":
+        result = _run_episode_discovery_context(arguments)
     elif command == "wide-temporal-series-page":
         result = (
             _run_wide_temporal_series_page(

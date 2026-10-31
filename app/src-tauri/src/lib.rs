@@ -376,6 +376,28 @@ fn explore_long_temporal_series_detail(
 }
 
 #[tauri::command(async)]
+fn explore_episode_discovery(
+    path: String,
+    temporal_axis_json: String,
+    start_time: String,
+    end_time: String,
+    expected_interval_seconds: f64,
+) -> Result<String, String> {
+    if !expected_interval_seconds.is_finite() || expected_interval_seconds <= 0.0 {
+        return Err("expected_interval_seconds must be positive and finite".to_string());
+    }
+    let arguments = vec![
+        "episode-discovery-context".to_string(),
+        path,
+        temporal_axis_json,
+        start_time,
+        end_time,
+        expected_interval_seconds.to_string(),
+    ];
+    run_profile_json_command(&arguments, "Episode discovery")
+}
+
+#[tauri::command(async)]
 fn explore_cross_series_presence(
     path: String,
     temporal_axis_json: String,
@@ -1085,6 +1107,7 @@ pub fn run() {
             explore_long_temporal_series,
             explore_long_temporal_series_detail,
             explore_cross_series_presence,
+            explore_episode_discovery,
             explore_wide_temporal_reference,
             explore_wide_temporal_reference_comparison,
 			raw_analysis_dataset,
