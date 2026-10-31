@@ -557,7 +557,7 @@ function EpisodeDiscoveryForInterval({
         <span>Original observations · bounded analysis</span>
       </div>
       <div className="analysis-group-content">
-        <span>Find candidate observation segments in the selected interval. This does not classify anomalies or identify recurring motifs.</span>
+        <span>Analyze original observations inside the selected interval. Segment boundaries describe changes or gaps between consecutive observations within that selection; they do not classify anomalies or recurring motifs.</span>
         <button type="button" disabled={loading || !expectedIntervalSeconds || expectedIntervalSeconds <= 0}
           onClick={() => void analyze()}>
           {loading ? "Analyzing..." : "Discover observation segments"}
@@ -571,7 +571,7 @@ function EpisodeDiscoveryForInterval({
         )}
         {result?.status === "measured" && (
           <>
-            <span role="status">{result.episode_count} candidate segment(s) from {result.observation_count} source observation(s). {result.boundaries.length} boundary/boundaries. These are not anomalous-event classifications.</span>
+            <span role="status">Analyzed {result.observation_count} original observations in the selected interval. Results are candidate segments, not anomalous-event classifications.</span>
             {evidence.length > 0 && <EpisodeDiscoveryDetails result={result} evidence={evidence} />}
             {evidence.length === 0 && <span>No candidate segments to display.</span>}
           </>

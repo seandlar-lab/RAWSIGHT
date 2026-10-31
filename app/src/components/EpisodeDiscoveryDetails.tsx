@@ -38,7 +38,7 @@ export function EpisodeDiscoveryDetails({ result, evidence }: Props) {
     <section aria-label="Episode discovery details" style={{ marginTop: 12 }}>
       <div style={{ fontSize: 13, marginBottom: 10, opacity: 0.85 }}>
         {result.episode_count} observation segment(s), {result.boundaries.length} boundary/boundaries.
-        These are candidate segments, not anomalies, motifs, or operating states.
+        Boundaries are evaluated only between observations included in this selection. Missing time before the first or after the last selected observation is not a segment boundary.
       </div>
       <div style={{ display: "grid", gap: 10 }}>
         {result.episodes.map((segment, index) => {
@@ -66,7 +66,7 @@ export function EpisodeDiscoveryDetails({ result, evidence }: Props) {
                 </div>
               ) : (
                 <div style={{ marginTop: 10, fontSize: 12, opacity: 0.72 }}>
-                  First segment in the selected interval; no preceding boundary within this result.
+                  First observed segment within this selection. There is no preceding selected observation to establish a boundary here.
                 </div>
               )}
               {columns.length > 0 && (
