@@ -13,7 +13,7 @@ import type {
   RawAnalysisColumnResult,
 } from "./types/rawAnalysis";
 import { episodeDiscoveryToAnalysisEvidence } from "./analysis/episodeDiscoveryEvidenceAdapter";
-import { AnalysisEvidencePanel } from "./components/AnalysisEvidencePanel";
+import { EpisodeDiscoveryDetails } from "./components/EpisodeDiscoveryDetails";
 import type { EpisodeDiscoveryResult } from "./types/episodeDiscovery";
 import { RawAnalysisVisualization } from "./components/RawAnalysisVisualization";
 import { WideTemporalSeriesDetailPanel } from "./components/WideTemporalSeriesDetailPanel";
@@ -572,7 +572,7 @@ function EpisodeDiscoveryForInterval({
         {result?.status === "measured" && (
           <>
             <span role="status">{result.episode_count} candidate segment(s) from {result.observation_count} source observation(s). {result.boundaries.length} boundary/boundaries. These are not anomalous-event classifications.</span>
-            {evidence.length > 0 && <AnalysisEvidencePanel items={evidence} range={interval} />}
+            {evidence.length > 0 && <EpisodeDiscoveryDetails result={result} evidence={evidence} />}
             {evidence.length === 0 && <span>No candidate segments to display.</span>}
           </>
         )}
