@@ -2,6 +2,7 @@
 export type AnalysisEvidenceStatus = "measured" | "candidate" | "unavailable";
 export type AnalysisEvidenceKind =
   | "temporal_interval"
+  | "temporal_segment"
   | "numeric_outlier"
   | "multivariate_observation"
   | "sequence_pattern"
