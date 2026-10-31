@@ -17,6 +17,7 @@ import {
 import type {
     TimeSeriesPoint,
 } from "../visualization";
+import { ContinuityEvidenceStrip } from "./ContinuityEvidenceStrip";
 
 type LongTemporalSeriesChartResult =
     | LongTemporalSeriesResult
@@ -98,6 +99,8 @@ export function LongTemporalSeriesChart({
 }: Props) {
     const buckets =
         result.display_projection.buckets ?? [];
+    const evidence = "continuity_evidence" in result ? result.continuity_evidence : null;
+    const evidenceRange = "requested_range" in result ? result.requested_range : null;
 
     if (buckets.length === 0) {
         const isDetail =
@@ -115,10 +118,22 @@ export function LongTemporalSeriesChart({
             requestedRange.start.slice(0, 10) ===
             requestedRange.end.slice(0, 10);
 
+        // Detail axes use the user-selected time range, not the span
+        // between first and last observed values. Never interpolate.
+        const startMs = requestedRange ? Date.parse(requestedRange.start) : Number.NaN;
+        const endMs = requestedRange ? Date.parse(requestedRange.end) : Number.NaN;
+        const validRange = Number.isFinite(startMs) && Number.isFinite(endMs) && endMs > startMs;
+        const knownGaps = isDetail && evidence?.intervals
+            ? evidence.intervals.filter((interval) =>
+                Number.isFinite(Date.parse(interval.from_value)) &&
+                Number.isFinite(Date.parse(interval.to_value)) &&
+                Date.parse(interval.to_value) > Date.parse(interval.from_value))
+            : [];
+        const projectedPoints = result.display_projection.points;
         const points: TimeSeriesPoint[] =
 
-            result.display_projection.points.map(
-                (point) => ({
+            projectedPoints.map(
+                (point, index) => ({
                     index:
                         point.projection_index,
                     label:
@@ -136,7 +151,10 @@ export function LongTemporalSeriesChart({
                     value:
                         finiteOrNull(point.value),
                     xPosition:
-                        Number.isFinite(point.position)
+                        validRange && Number.isFinite(Date.parse(point.time))
+                            ? Math.max(0, Math.min(1,
+                                (Date.parse(point.time) - startMs) / (endMs - startMs)))
+                            : Number.isFinite(point.position)
                             ? Math.max(
                                 0,
                                 Math.min(
@@ -146,11 +164,19 @@ export function LongTemporalSeriesChart({
                             )
                             : undefined,
                     breakBefore:
-                        point.break_before,
+                        point.break_before || (index > 0 && knownGaps.some((gap) => {
+                            const prior = Date.parse(projectedPoints[index - 1].time);
+                            const current = Date.parse(point.time);
+                            const gapStart = Date.parse(gap.from_value);
+                            const gapEnd = Date.parse(gap.to_value);
+                            // The interval must be spanned by actual displayed observations.
+                            return prior <= gapStart && current >= gapEnd;
+                        })),
                 }),
             );
 
         return (
+            <>
             <TimeSeriesChart
                 points={points}
                 title="Temporal series"
@@ -159,17 +185,27 @@ export function LongTemporalSeriesChart({
                     `${result.value_column_name}`
                 }
                 seriesStrokeWidth={1.5}
+                horizontalRange={isDetail && validRange ? requestedRange! : undefined}
+                unobservedIntervals={knownGaps.map((gap) => ({
+                    start: gap.from_value,
+                    end: gap.to_value,
+                }))}
             />
+            <ContinuityEvidenceStrip evidence={evidence} range={evidenceRange} />
+            </>
         );
     }
 
     return (
+        <>
         <BucketOverview
             result={result}
             buckets={buckets}
             onSelectBucket={onSelectBucket}
             selectedRange={selectedRange}
         />
+        <ContinuityEvidenceStrip evidence={evidence} range={evidenceRange} />
+        </>
     );
 }
 

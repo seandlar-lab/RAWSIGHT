@@ -80,7 +80,24 @@ export type LongTemporalSeriesResult = {
   execution: LongTemporalSeriesExecution;
 };
 
+export type LongTemporalContinuityInterval = {
+  from_index: number;
+  to_index: number;
+  from_value: string;
+  to_value: string;
+  interval_seconds: number;
+  multiple_of_dominant_interval: number | null;
+};
+
+export type LongTemporalContinuityEvidence = {
+  source: string;
+  selection: string;
+  bounded: boolean;
+  intervals: LongTemporalContinuityInterval[];
+};
+
 export type LongTemporalSeriesDetailResult = {
+  continuity_evidence?: LongTemporalContinuityEvidence | null;
   status: string;
   result_kind: string;
 

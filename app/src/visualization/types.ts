@@ -31,6 +31,16 @@ export type TimeSeriesMarker = {
   title?: string;
 };
 
+export type TimeSeriesTimeRange = {
+  start: string;
+  end: string;
+};
+
+export type TimeSeriesUnobservedInterval = {
+  start: string;
+  end: string;
+};
+
 export type TimeSeriesChartProps = InspectionLinkProps & {
   points: TimeSeriesPoint[];
   markers?: TimeSeriesMarker[];
@@ -38,4 +48,8 @@ export type TimeSeriesChartProps = InspectionLinkProps & {
   ariaLabel?: string;
   markerLegend?: string;
   seriesStrokeWidth?: number;
+  /** Explicit horizontal domain used by an analytical detail selection. */
+  horizontalRange?: TimeSeriesTimeRange;
+  /** Observed time boundaries with no rows strictly between them. */
+  unobservedIntervals?: TimeSeriesUnobservedInterval[];
 };

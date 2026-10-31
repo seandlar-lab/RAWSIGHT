@@ -118,6 +118,8 @@ export function TimeSeriesChart({
   ariaLabel = "Time series chart",
   markerLegend,
   seriesStrokeWidth = 3.8,
+  horizontalRange,
+  unobservedIntervals = [],
   inspectionIndex,
   inspectionLocked = false,
   onInspectionHover,
@@ -343,6 +345,26 @@ export function TimeSeriesChart({
           marker !== null,
       );
 
+  const rangeStart = horizontalRange ? Date.parse(horizontalRange.start) : Number.NaN;
+  const rangeEnd = horizontalRange ? Date.parse(horizontalRange.end) : Number.NaN;
+  const hasValidRange = Number.isFinite(rangeStart) &&
+    Number.isFinite(rangeEnd) && rangeEnd > rangeStart;
+  const highlightedIntervals = hasValidRange
+    ? unobservedIntervals.flatMap((interval) => {
+        const start = Date.parse(interval.start);
+        const end = Date.parse(interval.end);
+        if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return [];
+        const clippedStart = Math.max(rangeStart, start);
+        const clippedEnd = Math.min(rangeEnd, end);
+        if (clippedEnd <= clippedStart) return [];
+        return [{
+          x: padding.left + ((clippedStart - rangeStart) / (rangeEnd - rangeStart)) * plotWidth,
+          width: ((clippedEnd - clippedStart) / (rangeEnd - rangeStart)) * plotWidth,
+          label: `${interval.start} – ${interval.end}`,
+        }];
+      })
+    : [];
+
   const firstLabel =
     points[0]?.axisLabel
     ?? points[0]?.label
@@ -356,6 +378,9 @@ export function TimeSeriesChart({
       points.length - 1
     ]?.label
     ?? "";
+
+  const displayFirstLabel = hasValidRange ? horizontalRange!.start.replace('T', ' ') : firstLabel;
+  const displayLastLabel = hasValidRange ? horizontalRange!.end.replace('T', ' ') : lastLabel;
 
   const yTicks =
     Array.from(
@@ -634,6 +659,20 @@ export function TimeSeriesChart({
             cursor: "crosshair",
           }}
         >
+          {highlightedIntervals.map((interval, index) => (
+            <rect
+              key={`unobserved-${index}`}
+              x={interval.x}
+              y={padding.top}
+              width={interval.width}
+              height={plotHeight}
+              fill="#bd7948"
+              fillOpacity={0.13}
+              pointerEvents="none"
+            >
+              <title>{`No observations between ${interval.label}`}</title>
+            </rect>
+          ))}
           <line
             x1={
               padding.left
@@ -933,14 +972,19 @@ export function TimeSeriesChart({
         }}
       >
         <span>
-          {firstLabel}
+          {displayFirstLabel}
         </span>
 
         <span>
-          {lastLabel}
+          {displayLastLabel}
         </span>
       </div>
 
+      {highlightedIntervals.length > 0 && (
+        <span style={{ fontSize: "12px", opacity: 0.75 }}>
+          Shaded intervals indicate known observation gaps; no values are interpolated.
+        </span>
+      )}
       {markerLegend &&
         resolvedMarkers.length > 0 && (
           <span>
