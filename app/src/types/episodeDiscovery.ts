@@ -21,7 +21,7 @@ export type EpisodeCandidate = {
 
 export type EpisodeDiscoveryResult = {
   analysis_kind: "automatic_episode_discovery";
-  status: "measured" | "insufficient_data";
+  status: "measured" | "insufficient_data" | "resource_limit";
   method: string;
   columns_considered: string[];
   observation_count: number;

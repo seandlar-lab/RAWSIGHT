@@ -12,6 +12,9 @@ import "./App.css";
 import type {
   RawAnalysisColumnResult,
 } from "./types/rawAnalysis";
+import { episodeDiscoveryToAnalysisEvidence } from "./analysis/episodeDiscoveryEvidenceAdapter";
+import { AnalysisEvidencePanel } from "./components/AnalysisEvidencePanel";
+import type { EpisodeDiscoveryResult } from "./types/episodeDiscovery";
 import { RawAnalysisVisualization } from "./components/RawAnalysisVisualization";
 import { WideTemporalSeriesDetailPanel } from "./components/WideTemporalSeriesDetailPanel";
 import type {
@@ -491,6 +494,91 @@ function buildWideTemporalAxisContext(
     end_index:
       wideTemporal.temporal_column_end_index,
   });
+}
+
+/** On-demand source-level discovery in the current Explore detail interval.
+ * A source-window candidate is not necessarily an anomaly or operating state.
+ * Heavy bounded analysis is never started by chart rendering or zooming.
+ */
+function EpisodeDiscoveryForInterval({
+  path,
+  temporalAxis,
+  interval,
+  expectedIntervalSeconds,
+}: {
+  path: string;
+  temporalAxis: StructuralTemporalAxis;
+  interval: { start: string; end: string };
+  expectedIntervalSeconds: number | null | undefined;
+}) {
+  const [result, setResult] = useState<EpisodeDiscoveryResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const requestId = useRef(0);
+
+  useEffect(() => {
+    requestId.current += 1;
+    setResult(null);
+    setError(null);
+    setLoading(false);
+  }, [path, temporalAxis, interval.start, interval.end, expectedIntervalSeconds]);
+
+  async function analyze() {
+    if (!expectedIntervalSeconds || !Number.isFinite(expectedIntervalSeconds) || expectedIntervalSeconds <= 0) {
+      setError("No positive dominant observation interval is available for this dataset.");
+      return;
+    }
+    const id = ++requestId.current;
+    setLoading(true);
+    setError(null);
+    setResult(null);
+    try {
+      const response = await invoke<string>("explore_episode_discovery", {
+        path,
+        temporalAxisJson: JSON.stringify(temporalAxis),
+        startTime: interval.start,
+        endTime: interval.end,
+        expectedIntervalSeconds,
+      });
+      const parsed = JSON.parse(response) as EpisodeDiscoveryResult;
+      if (id === requestId.current) setResult(parsed);
+    } catch (exc) {
+      if (id === requestId.current) setError(String(exc));
+    } finally {
+      if (id === requestId.current) setLoading(false);
+    }
+  }
+
+  const evidence = episodeDiscoveryToAnalysisEvidence(result);
+  return (
+    <div className="analysis-group" aria-label="Episode discovery for selected interval">
+      <div className="analysis-group-header">
+        <strong>Episode discovery</strong>
+        <span>Original observations · bounded analysis</span>
+      </div>
+      <div className="analysis-group-content">
+        <span>Find candidate observation segments in the selected interval. This does not classify anomalies or identify recurring motifs.</span>
+        <button type="button" disabled={loading || !expectedIntervalSeconds || expectedIntervalSeconds <= 0}
+          onClick={() => void analyze()}>
+          {loading ? "Analyzing..." : "Discover observation segments"}
+        </button>
+        {error && <span role="alert">Episode discovery failed: {error}</span>}
+        {result?.status === "resource_limit" && (
+          <span role="status">Too many source observations for this analysis (limit 100,000). Select a shorter interval; no partial segment result was generated.</span>
+        )}
+        {result?.status === "insufficient_data" && (
+          <span role="status">Insufficient source observations to identify segments.</span>
+        )}
+        {result?.status === "measured" && (
+          <>
+            <span role="status">{result.episode_count} candidate segment(s) from {result.observation_count} source observation(s). {result.boundaries.length} boundary/boundaries. These are not anomalous-event classifications.</span>
+            {evidence.length > 0 && <AnalysisEvidencePanel items={evidence} range={interval} />}
+            {evidence.length === 0 && <span>No candidate segments to display.</span>}
+          </>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function App() {
@@ -2918,6 +3006,15 @@ function App() {
                                                 );
                                               }}
                                             />
+                                            {fileInfo && profile?.structural_model?.logical_structure?.temporal_axis?.orientation === "vertical" && (
+                                              <EpisodeDiscoveryForInterval
+                                                key={`${fileInfo.path}:${longTemporalSeriesDetail.requested_range.start}:${longTemporalSeriesDetail.requested_range.end}`}
+                                                path={fileInfo.path}
+                                                temporalAxis={profile.structural_model.logical_structure.temporal_axis}
+                                                interval={longTemporalSeriesDetail.requested_range}
+                                                expectedIntervalSeconds={profile.long_temporal?.continuity?.dominant_positive_interval_seconds}
+                                              />
+                                            )}
                                           </div>
                                         )}
 
