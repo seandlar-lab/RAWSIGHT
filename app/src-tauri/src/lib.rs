@@ -398,6 +398,32 @@ fn explore_episode_discovery(
 }
 
 #[tauri::command(async)]
+fn explore_event_context_similarity(
+    path: String,
+    temporal_axis_json: String,
+    start_time: String,
+    end_time: String,
+    expected_interval_seconds: f64,
+    selected_columns: Vec<String>,
+    target_event_id: Option<String>,
+) -> Result<String, String> {
+    if !expected_interval_seconds.is_finite() || expected_interval_seconds <= 0.0 {
+        return Err("expected_interval_seconds must be positive and finite".into());
+    }
+    if selected_columns.is_empty() || selected_columns.len() > 16 {
+        return Err("Select between 1 and 16 numeric series".into());
+    }
+    let columns_json = serde_json::to_string(&selected_columns)
+        .map_err(|e| format!("Could not serialize selected columns: {e}"))?;
+    let arguments = vec![
+        "event-similarity-context".to_string(),
+        path, temporal_axis_json, start_time, end_time,
+        expected_interval_seconds.to_string(), columns_json,
+        target_event_id.unwrap_or_default(), "30".to_string(),
+    ];
+    run_profile_json_command(&arguments, "Event context similarity")
+}
+#[tauri::command(async)]
 fn explore_cross_series_presence(
     path: String,
     temporal_axis_json: String,
@@ -1107,6 +1133,7 @@ pub fn run() {
             explore_long_temporal_series,
             explore_long_temporal_series_detail,
             explore_cross_series_presence,
+            explore_event_context_similarity,
             explore_episode_discovery,
             explore_wide_temporal_reference,
             explore_wide_temporal_reference_comparison,

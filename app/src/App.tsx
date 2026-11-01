@@ -1,3 +1,4 @@
+import { TemporalSelection } from "./components/TemporalSelection";
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -13,6 +14,7 @@ import type {
   RawAnalysisColumnResult,
 } from "./types/rawAnalysis";
 import { episodeDiscoveryToAnalysisEvidence } from "./analysis/episodeDiscoveryEvidenceAdapter";
+import { EventSimilarityExplore } from "./components/EventSimilarityExplore";
 import { EpisodeDiscoveryDetails } from "./components/EpisodeDiscoveryDetails";
 import type { EpisodeDiscoveryResult } from "./types/episodeDiscovery";
 import { RawAnalysisVisualization } from "./components/RawAnalysisVisualization";
@@ -2946,7 +2948,20 @@ function App() {
                                             </div>
                                           )}
 
-                                        <LongTemporalSeriesChart
+                                        <TemporalSelection
+                                          key={`${fileInfo?.path ?? ""}:${longTemporalSeries.value_column_name}`}
+                                          result={longTemporalSeries}
+                                          selectedRange={longTemporalSeriesDetail?.requested_range ?? null}
+                                          loading={isLoadingLongTemporalSeriesDetail}
+                                          onApply={(start, end) => {
+                                            void loadLongTemporalSeriesDetail(
+                                              longTemporalSeries.value_column_name,
+                                              start,
+                                              end,
+                                            );
+                                          }}
+                                        />
+                                                                                <LongTemporalSeriesChart
                                           result={longTemporalSeries}
                                           selectedRange={
                                             longTemporalSeriesDetail
@@ -3007,20 +3022,29 @@ function App() {
                                               }}
                                             />
                                             {fileInfo && profile?.structural_model?.logical_structure?.temporal_axis?.orientation === "vertical" && (
-                                              <EpisodeDiscoveryForInterval
-                                                key={`${fileInfo.path}:${longTemporalSeriesDetail.requested_range.start}:${longTemporalSeriesDetail.requested_range.end}`}
-                                                path={fileInfo.path}
-                                                temporalAxis={profile.structural_model.logical_structure.temporal_axis}
-                                                interval={longTemporalSeriesDetail.requested_range}
-                                                expectedIntervalSeconds={profile.long_temporal?.continuity?.dominant_positive_interval_seconds}
-                                              />
+                                              <>
+                                                <EventSimilarityExplore
+                                                  path={fileInfo.path}
+                                                  temporalAxis={profile.structural_model.logical_structure.temporal_axis}
+                                                  interval={longTemporalSeriesDetail.requested_range}
+                                                  expectedIntervalSeconds={profile.long_temporal?.continuity?.dominant_positive_interval_seconds}
+                                                  numericColumns={profile.columns.filter(column => /^(double|float|real|decimal|numeric|tinyint|smallint|integer|int|bigint|hugeint|ubigint)/i.test(column.type)).map(column => column.name).filter(name => name !== profile.columns[profile.structural_model!.logical_structure!.temporal_axis!.sequence_index]?.name).slice(0, 16)}
+                                                />
+                                                <EpisodeDiscoveryForInterval
+                                                  key={`${fileInfo.path}:${longTemporalSeriesDetail.requested_range.start}:${longTemporalSeriesDetail.requested_range.end}`}
+                                                  path={fileInfo.path}
+                                                  temporalAxis={profile.structural_model.logical_structure.temporal_axis}
+                                                  interval={longTemporalSeriesDetail.requested_range}
+                                                  expectedIntervalSeconds={profile.long_temporal?.continuity?.dominant_positive_interval_seconds}
+                                                />
+                                              </>
                                             )}
                                           </div>
                                         )}
 
                                       </div>
                                     )}
-                                  </div>
+                                  </div >
                                 )}
                               </div>
                             )}
@@ -4242,7 +4266,7 @@ function App() {
                 </p>
               </div>
             </main>
-          </div>
+          </div >
         ) : (
           <>
             <h1>The good, the bad and the ugly of your data.</h1>
@@ -4317,9 +4341,10 @@ function App() {
               )}
             </div>
           </>
-        )}
-      </section>
-    </main>
+        )
+        }
+      </section >
+    </main >
   );
 }
 

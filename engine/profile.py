@@ -621,6 +621,25 @@ def _run_episode_discovery_context(arguments: list[str]) -> dict:
     )
 
 
+def _run_event_similarity_context(arguments: list[str]) -> dict:
+    """Execute gap similarity against an existing validated vertical axis."""
+    if len(arguments) != 9:
+        raise ValueError("event-similarity-context requires path, axis, start, end, cadence, columns JSON, target ID, points")
+    from rawsight.event_context_similarity_execution import execute_event_context_similarity
+    selected_columns = json.loads(arguments[6])
+    if not isinstance(selected_columns, list):
+        raise ValueError("selected_columns must be an array")
+    return execute_event_context_similarity(
+        file_path=arguments[1],
+        temporal_axis=_validated_temporal_axis_from_json(arguments[2], expected_orientation="vertical"),
+        gap_scan_start=arguments[3], gap_scan_end=arguments[4],
+        expected_interval_seconds=float(arguments[5]),
+        selected_columns=selected_columns,
+        target_event_id=arguments[7] or None,
+        points_per_side=int(arguments[8]),
+        max_events=100,
+    )
+
 def main(arguments: list[str]) -> int:
     """
     Backward-compatible engine entrypoint.
@@ -677,6 +696,8 @@ def main(arguments: list[str]) -> int:
         result = _run_cross_series_presence_context(
             arguments
         )
+    elif command == "event-similarity-context":
+        result = _run_event_similarity_context(arguments)
     elif command == "episode-discovery-context":
         result = _run_episode_discovery_context(arguments)
     elif command == "wide-temporal-series-page":
