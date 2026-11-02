@@ -640,6 +640,19 @@ def _run_event_similarity_context(arguments: list[str]) -> dict:
         max_events=100,
     )
 
+def _run_dataset_profile_context(arguments: list[str]) -> dict:
+    # Load or create persistent profile; raw observations remain untouched.
+    if len(arguments) != 4:
+        raise ValueError("dataset-profile-context needs source path, metadata path and store directory")
+    from rawsight.dataset_profile_store import get_or_create_profile
+    return get_or_create_profile(
+        file_path=arguments[1],
+        metadata_path=arguments[2] or None,
+        store_dir=arguments[3],
+        profiler=profile_dataset,
+    )
+
+
 def main(arguments: list[str]) -> int:
     """
     Backward-compatible engine entrypoint.
@@ -679,7 +692,9 @@ def main(arguments: list[str]) -> int:
 
     command = arguments[0]
 
-    if command == "long-temporal-series-context":
+    if command == "dataset-profile-context":
+        result = _run_dataset_profile_context(arguments)
+    elif command == "long-temporal-series-context":
         result = (
             _run_long_temporal_series_context(
                 arguments

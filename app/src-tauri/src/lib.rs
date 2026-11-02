@@ -286,6 +286,24 @@ fn run_profile_json_command(
 }
 
 #[tauri::command(async)]
+fn get_dataset_profile(
+    app: AppHandle,
+    path: String,
+    metadata_path: Option<String>,
+) -> Result<String, String> {
+    let profile_dir = app.path().app_data_dir()
+        .map_err(|error| format!("Cannot resolve profile directory: {error}"))?
+        .join("dataset_profiles");
+    let arguments = vec![
+        "dataset-profile-context".to_string(),
+        path,
+        metadata_path.unwrap_or_default(),
+        profile_dir.to_string_lossy().into_owned(),
+    ];
+    run_profile_json_command(&arguments, "Dataset profile")
+}
+
+#[tauri::command(async)]
 fn explore_wide_temporal_series_page(
     path: String,
     temporal_axis_json: String,
@@ -1128,6 +1146,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_file_info,
             profile_dataset,
+            get_dataset_profile,
             explore_wide_temporal_series_page,
             explore_wide_temporal_series_detail,
             explore_long_temporal_series,

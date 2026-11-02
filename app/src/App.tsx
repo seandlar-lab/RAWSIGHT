@@ -586,6 +586,8 @@ function EpisodeDiscoveryForInterval({
 function App() {
   const [fileInfo, setFileInfo] = useState<FileInfo | null>(null);
   const [profile, setProfile] = useState<DatasetProfile | null>(null);
+  const [datasetProfileStatus, setDatasetProfileStatus] = useState<"created" | "reused" | "refreshed" | null>(null);
+  const [datasetMetadataPath, setDatasetMetadataPath] = useState<string | null>(null);
   const [rawAnalysisResult, setRawAnalysisResult] =
     useState<RawAnalysisColumnResult | null>(null);
   const [rawAnalysisColumnName, setRawAnalysisColumnName] =
@@ -771,6 +773,51 @@ function App() {
     await getCurrentWindow().close();
   }
 
+  async function loadStoredDatasetProfile(
+    datasetPath: string,
+    metadataPath: string | null = null,
+  ): Promise<void> {
+    setIsAnalyzing(true);
+    setError(null);
+    setProgressMessage("Loading dataset profile");
+    setDatasetProfileStatus(null);
+    try {
+      const raw = await invoke<string>("get_dataset_profile", {
+        path: datasetPath,
+        metadataPath,
+      });
+      const envelope = JSON.parse(raw) as {
+        cache_status: "created" | "reused" | "refreshed";
+        dataset_profile: { light_analysis: DatasetProfile };
+      };
+      if (!envelope.dataset_profile?.light_analysis) {
+        throw new Error("Dataset Profile lacks a Light Analysis result");
+      }
+      setProfile(envelope.dataset_profile.light_analysis);
+      setAnalysisComplete(true);
+      setDatasetProfileStatus(envelope.cache_status);
+    } catch (error) {
+      setProfile(null);
+      setAnalysisComplete(false);
+      setError(`Could not load dataset profile: ${String(error)}`);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  }
+
+  async function attachDatasetMetadata(): Promise<void> {
+    if (!fileInfo) return;
+    const selected = await open({
+      multiple: false,
+      directory: false,
+      title: "Select optional metadata JSON",
+      filters: [{ name: "JSON metadata", extensions: ["json"] }],
+    });
+    if (typeof selected !== "string") return;
+    setDatasetMetadataPath(selected);
+    await loadStoredDatasetProfile(fileInfo.path, selected);
+  }
+
   async function openDataset() {
     const file = await open({
       multiple: false,
@@ -788,6 +835,8 @@ function App() {
     }
 
     setProfile(null);
+    setDatasetProfileStatus(null);
+    setDatasetMetadataPath(null);
     setError(null);
     setRowInspection(null);
     setProgressSteps([]);
@@ -866,6 +915,7 @@ function App() {
 
       setActiveProject(project);
       setActiveSection("overview");
+      await loadStoredDatasetProfile(info.path);
 
     } catch (err) {
       setError(String(err));
@@ -924,8 +974,13 @@ function App() {
           extension,
           size: activeDataset.source.size,
         });
+        setDatasetMetadataPath(null);
+        await loadStoredDatasetProfile(activeDataset.source.path);
       } else {
         setFileInfo(null);
+        setProfile(null);
+        setAnalysisComplete(false);
+        setDatasetProfileStatus(null);
       }
 
     } catch (err) {
@@ -1283,37 +1338,8 @@ function App() {
     }
   }
   async function runLightAnalysis() {
-    if (!fileInfo) {
-      return;
-    }
-
-    setProfile(null);
-    setError(null);
-    setRowInspection(null);
-    setProgressSteps([]);
-    setAnalysisComplete(false);
-    setProgressMessage("Preparing analysis");
-    setIsAnalyzing(true);
-
-    try {
-      const rawProfile = await invoke<string>(
-        "profile_dataset",
-        {
-          path: fileInfo.path,
-        },
-      );
-
-      const parsedProfile =
-        JSON.parse(rawProfile) as DatasetProfile;
-
-      setProfile(parsedProfile);
-      setAnalysisComplete(true);
-
-    } catch (err) {
-      setError(String(err));
-    } finally {
-      setIsAnalyzing(false);
-    }
+    if (!fileInfo) return;
+    await loadStoredDatasetProfile(fileInfo.path, datasetMetadataPath);
   }
   async function loadWideTemporalReference(
   ): Promise<WideTemporalReferenceExecution | null> {
@@ -2204,17 +2230,22 @@ function App() {
                       </p>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={runLightAnalysis}
-                      disabled={isAnalyzing || !fileInfo}
-                    >
-                      {isAnalyzing
-                        ? "Analyzing..."
-                        : analysisComplete
-                          ? "Run Light Analysis again"
-                          : "Run Light Analysis"}
-                    </button>
+                    <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                      <span role="status">
+                        {datasetProfileStatus === "reused"
+                          ? "Tidigare analyserad – profil återanvänd"
+                          : datasetProfileStatus === "created"
+                            ? "Dataprofil skapad och sparad"
+                            : isAnalyzing ? "Förbereder dataprofil..." : "Ingen dataprofil inläst"}
+                      </span>
+                      <button type="button" onClick={attachDatasetMetadata} disabled={isAnalyzing || !fileInfo}>
+                        {datasetMetadataPath ? "Byt metadata (JSON)" : "Lägg till metadata (JSON)"}
+                      </button>
+                      <button type="button" onClick={runLightAnalysis} disabled={isAnalyzing || !fileInfo}>
+                        {isAnalyzing ? "Analyserar..." : "Kontrollera sparad profil"}
+                      </button>
+                      {profile && <button type="button" onClick={() => setActiveSection("raw_analysis")}>Explore</button>}
+                    </div>
                   </div>
                 )}
                 {activeSection === "raw_analysis" && (
