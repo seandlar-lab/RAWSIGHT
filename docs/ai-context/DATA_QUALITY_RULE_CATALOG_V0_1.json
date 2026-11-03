@@ -1,0 +1,83 @@
+{
+  "catalog_id": "rawsight-data-quality",
+  "catalog_version": "0.1.0-draft",
+  "status": "design_only_not_executable",
+  "default_policy": "facts_first_no_implicit_quality_assessment",
+  "assessment_statuses": [
+    "verified",
+    "violation",
+    "observed_variation",
+    "insufficient_evidence",
+    "not_assessed"
+  ],
+  "rules": [
+    {
+      "rule_id": "DQ-COMP-001",
+      "rule_version": "0.1.0",
+      "dimension": "ISO_25012_completeness",
+      "rule_kind": "required_non_null",
+      "title_sv": "Fullständighet i deklarerade obligatoriska fält",
+      "required_fact_kinds": ["complete_column"],
+      "requirement": null,
+      "requirement_source": null,
+      "behavior_without_requirement": "not_assessed_and_report_facts",
+      "notes_sv": "Användarens kravprofil måste ange fält och tillåten saknadhet innan verifierad/regelbrott får användas."
+    },
+    {
+      "rule_id": "DQ-UNIQ-001",
+      "rule_version": "0.1.0",
+      "dimension": "rawsight_uniqueness_mapped_by_context",
+      "rule_kind": "declared_unique",
+      "title_sv": "Unikhet enligt deklarerad nyckel",
+      "required_fact_kinds": ["distinct_values_or_repeats"],
+      "requirement": null,
+      "requirement_source": null,
+      "behavior_without_requirement": "not_assessed_and_report_facts"
+    },
+    {
+      "rule_id": "DQ-DOM-001",
+      "rule_version": "0.1.0",
+      "dimension": "ISO_25012_accuracy_or_consistency_contextual",
+      "rule_kind": "allowed_range_or_set",
+      "title_sv": "Domängiltighet enligt dokumenterad regel",
+      "required_fact_kinds": ["range_or_set_membership"],
+      "requirement": null,
+      "requirement_source": null,
+      "behavior_without_requirement": "not_assessed_and_report_facts"
+    },
+    {
+      "rule_id": "DQ-TIME-001",
+      "rule_version": "0.1.0",
+      "dimension": "rawsight_temporal_structure_observation",
+      "rule_kind": "observation_only",
+      "title_sv": "Beskriv observerad tidsstruktur",
+      "required_fact_kinds": ["time_structure", "boundary_event"],
+      "requirement": null,
+      "requirement_source": null,
+      "behavior_without_requirement": "observed_variation_if_supported_else_not_assessed",
+      "notes_sv": "Varken oregelbundna positiva intervall eller tidsluckor är automatiskt regelbrott."
+    },
+    {
+      "rule_id": "DQ-STRUCT-001",
+      "rule_version": "0.1.0",
+      "dimension": "rawsight_schema_conformance_contextual",
+      "rule_kind": "declared_schema",
+      "title_sv": "Följsamhet mot deklarerat schema",
+      "required_fact_kinds": ["schema_inference_or_cast_errors"],
+      "requirement": null,
+      "requirement_source": null,
+      "behavior_without_requirement": "not_assessed_and_report_facts"
+    },
+    {
+      "rule_id": "DQ-SUIT-001",
+      "rule_version": "0.1.0",
+      "dimension": "analysis_suitability_not_ISO_25012_characteristic",
+      "rule_kind": "method_requirements",
+      "title_sv": "Lämplighet för deklarerad analysmetod",
+      "required_fact_kinds": [],
+      "requirement": null,
+      "requirement_source": null,
+      "behavior_without_requirement": "not_assessed"
+    }
+  ]
+}
