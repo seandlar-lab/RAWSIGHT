@@ -28,3 +28,10 @@ datasets/
 # Secrets
 .env
 .env.*
+
+# RAWSIGHT local test and analysis data
+/testdata/
+/local_profiles/
+
+# Python test cache
+.pytest_cache/
