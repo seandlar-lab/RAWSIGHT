@@ -1,0 +1,21 @@
+/* Local, conservative styling. Does not modify the existing RAWSIGHT theme. */
+.rs-understand { display: grid; gap: 20px; max-width: 1100px; color: inherit; }
+.rs-understand-intro { border-bottom: 1px solid #d9d9d6; padding-bottom: 18px; }
+.rs-understand-intro h2 { margin: 5px 0 8px; font-size: clamp(1.35rem, 2vw, 2rem); }
+.rs-understand-intro p { margin: 6px 0; line-height: 1.5; }
+.rs-understand-subtitle { overflow-wrap: anywhere; font-weight: 600; }
+.rs-understand-eyebrow { font-size: .74rem; letter-spacing: .09em; font-weight: 700; opacity: .72; margin: 0; }
+.rs-understand-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px,1fr)); gap: 12px; }
+.rs-understand-metric { border: 1px solid #d9d9d6; border-radius: 10px; padding: 15px; display: grid; gap: 8px; min-width: 0; }
+.rs-understand-metric span { font-size: .83rem; opacity: .78; }
+.rs-understand-metric strong { font-size: clamp(1.05rem, 1.7vw, 1.45rem); overflow-wrap: anywhere; }
+.rs-understand-panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 330px), 1fr)); gap: 12px; }
+.rs-understand-panel { border: 1px solid #d9d9d6; border-radius: 10px; padding: 18px; }
+.rs-understand-panel h3 { margin: 9px 0; font-size: 1.08rem; }
+.rs-understand-panel p { line-height: 1.55; }
+.rs-understand-panel details { margin-top: 12px; }
+.rs-understand-panel summary { cursor: pointer; }
+.rs-understand-panel li { overflow-wrap: anywhere; margin: 6px 0; }
+.rs-understand-note, .rs-understand-footnote { opacity: .75; font-size: .84rem; line-height: 1.5; }
+.rs-understand-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.rs-understand-secondary { opacity: .82; }

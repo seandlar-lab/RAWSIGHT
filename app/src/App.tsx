@@ -1,3 +1,4 @@
+import { UnderstandOverview } from "./components/UnderstandOverview";
 import { TemporalSelection } from "./components/TemporalSelection";
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
@@ -307,7 +308,6 @@ type ProjectListItem = {
 };
 
 type ProjectSection =
-  | "overview"
   | "data"
   | "metadata"
   | "lineup"
@@ -702,7 +702,26 @@ function App() {
   const [activeProject, setActiveProject] =
     useState<RawsightProject | null>(null);
   const [activeSection, setActiveSection] =
-    useState<ProjectSection>("overview");
+    useState<ProjectSection>("raw_analysis");
+  // rs-nav-perf-v01: measurements are development-only; no user data persisted.
+  const navigationStartedAt = useRef<number | null>(null);
+  function navigateTo(section: ProjectSection) {
+    navigationStartedAt.current = performance.now();
+    setActiveSection(section);
+  }
+  useEffect(() => {
+    const start = navigationStartedAt.current;
+    if (start !== null) {
+      navigationStartedAt.current = null;
+      if (import.meta.env.DEV) {
+        console.info("[RAWSIGHT perf] navigation commit", {
+          section: activeSection,
+          durationMs: Math.round((performance.now() - start) * 10) / 10,
+          note: "Until React effect, not visual paint",
+        });
+      }
+    }
+  }, [activeSection]);
 
   wideTemporalSourceKeyRef.current =
     fileInfo?.path ?? null;
@@ -914,7 +933,7 @@ function App() {
       });
 
       setActiveProject(project);
-      setActiveSection("overview");
+      setActiveSection("raw_analysis");
       await loadStoredDatasetProfile(info.path);
 
     } catch (err) {
@@ -949,7 +968,7 @@ function App() {
     }
   }
   async function openExistingProject(projectItem: ProjectListItem) {
-    setActiveSection("overview");
+    setActiveSection("raw_analysis");
     try {
       const rawProject = await invoke<string>("load_project", {
         projectPath: projectItem.path,
@@ -1017,7 +1036,7 @@ function App() {
   }
   function goHome() {
     setActiveProject(null);
-    setActiveSection("overview");
+    setActiveSection("raw_analysis");
     setFileInfo(null);
     setProfile(null);
     setRowInspection(null);
@@ -2145,69 +2164,21 @@ function App() {
                 {activeProject.name}
               </div>
 
-              <nav className="project-navigation">
-                <button
-                  type="button"
-                  onClick={() => setActiveSection("overview")}
-                  className={activeSection === "overview" ? "active" : ""}
-                >
-                  Overview
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setActiveSection("data")}
-                  className={activeSection === "data" ? "active" : ""}
-                >
-                  Data
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setActiveSection("metadata")}
-                  className={activeSection === "metadata" ? "active" : ""}
-                >
-                  Metadata
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setActiveSection("lineup")}
-                  className={activeSection === "lineup" ? "active" : ""}
-                >
-                  The Lineup
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setActiveSection("analysis")}
-                  className={activeSection === "analysis" ? "active" : ""}
-                >
-                  Light Analysis
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setActiveSection("raw_analysis")}
-                  className={activeSection === "raw_analysis" ? "active" : ""}
-                >
-                  Explore
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setActiveSection("history")}
-                  className={activeSection === "history" ? "active" : ""}
-                >
-                  History
-                </button>
+              <nav className="project-navigation" aria-label="Projektmeny">
+                <button type="button" onClick={() => navigateTo("raw_analysis")}
+                  className={activeSection === "raw_analysis" ? "active" : ""}>Explore</button>
+                <button type="button" onClick={() => navigateTo("data")}
+                  className={["data", "lineup", "analysis"].includes(activeSection) ? "active" : ""}>Data</button>
+                <button type="button" onClick={() => navigateTo("metadata")}
+                  className={activeSection === "metadata" ? "active" : ""}>Metadata</button>
+                <button type="button" onClick={() => navigateTo("history")}
+                  className={activeSection === "history" ? "active" : ""}>History</button>
               </nav>
             </aside>
 
             <main className="project-main">
               <div className="project-workspace-header">
                 <div className="workspace-section-label">
-                  {activeSection === "overview" && "Overview"}
                   {activeSection === "data" && "Data"}
                   {activeSection === "lineup" && "The Lineup"}
                   {activeSection === "metadata" && "Metadata"}
@@ -2220,6 +2191,23 @@ function App() {
               </div>
 
               <div className="project-workspace-content">
+                {activeSection === "data" && (
+                  <div className="analysis-group" aria-label="Dataverktyg">
+                    <div className="analysis-group-header"><strong>Dataverktyg</strong></div>
+                    <div className="analysis-group-content">
+                      <span>Välj vilka kolumner som ska ingå och granska dataprofilen vid behov.</span>
+                      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                        <button type="button" onClick={() => navigateTo("lineup")}>Välj analyskolumner</button>
+                        <button type="button" onClick={() => navigateTo("analysis")}>Teknisk dataprofil</button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {(activeSection === "lineup" || activeSection === "analysis") && (
+                  <div style={{ marginBottom: 12 }}>
+                    <button type="button" onClick={() => navigateTo("data")}>← Till Data</button>
+                  </div>
+                )}
                 {activeSection === "analysis" && (
                   <div className="light-analysis-start">
                     <div>
@@ -2250,7 +2238,14 @@ function App() {
                 )}
                 {activeSection === "raw_analysis" && (
                   <div className="metadata-workspace">
-                    <div className="metadata-header">
+                    <UnderstandOverview
+                      profile={profile}
+                      fileName={fileInfo?.name}
+                      loading={isAnalyzing}
+                      onOpenAnalysis={() => setActiveSection("analysis")}
+                      onExplore={() => document.getElementById("rs-explore-details")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                    />
+                    <div id="rs-explore-details" className="metadata-header">
                       <div>
                         <strong>Explore</strong>
                         <p>
@@ -3652,7 +3647,7 @@ function App() {
                     </p>
                   </div>
                 )}
-                {(activeSection === "overview" || activeSection === "data") && fileInfo && (
+                {(activeSection === "raw_analysis" || activeSection === "data") && fileInfo && (
                   <div className="selected-file">
                     <div className="file-name">
                       {fileInfo.name}
