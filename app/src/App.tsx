@@ -1,4 +1,5 @@
 import { ExploreWorkspace } from "./workspaces/ExploreWorkspace";
+import { ExploreStructureSummary, TemporalContinuitySummary } from "./workspaces/ExploreVisualization";
 import {
   createNavigationState,
   navigate,
@@ -2366,33 +2367,12 @@ function App() {
                           );
                         return (
                           <>
-                            <div className="analysis-group">
-                              <div className="analysis-group-header">
-                                <strong>Detected structure</strong>
-                                <span>{strategy}</span>
-                              </div>
-
-                              <div className="analysis-group-content">
-                                <span>
-                                  Temporal orientation{" "}
-                                  <strong>{orientation}</strong>
-                                </span>
-
-                                <span>
-                                  Horizontal candidates{" "}
-                                  <strong>
-                                    {horizontalCandidateCount.toLocaleString()}
-                                  </strong>
-                                </span>
-
-                                <span>
-                                  Vertical candidates{" "}
-                                  <strong>
-                                    {verticalCandidateCount.toLocaleString()}
-                                  </strong>
-                                </span>
-                              </div>
-                            </div>
+                            <ExploreStructureSummary
+                              strategy={strategy}
+                              orientation={orientation}
+                              horizontalCandidateCount={horizontalCandidateCount}
+                              verticalCandidateCount={verticalCandidateCount}
+                            />
 
                             {strategy === "wide_temporal" && (
                               <>
@@ -2722,133 +2702,9 @@ function App() {
                               </>
                             )}
 
-                            {strategy === "long_temporal" &&
-                              profile.long_temporal?.continuity && (
-                                <div className="analysis-group">
-                                  <div className="analysis-group-header">
-                                    <strong>Temporal continuity</strong>
-                                    <span>Observed sequence</span>
-                                  </div>
-
-                                  <div className="analysis-group-content">
-                                    <span>
-                                      Time field{" "}
-                                      <strong>
-                                        {profile.long_temporal.temporal_column_name ??
-                                          "Unknown"}
-                                      </strong>
-                                    </span>
-
-                                    <span>
-                                      Observed order{" "}
-                                      <strong>
-                                        {profile.long_temporal.continuity.observed_order ??
-                                          "Not established"}
-                                      </strong>
-                                    </span>
-
-                                    <span>
-                                      Dominant positive interval{" "}
-                                      <strong>
-                                        {profile.long_temporal.continuity
-                                          .dominant_positive_interval_seconds !== null
-                                          ? `${profile.long_temporal.continuity
-                                            .dominant_positive_interval_seconds.toLocaleString()} s`
-                                          : "Not established"}
-                                      </strong>
-                                    </span>
-
-                                    <span>
-                                      Share at dominant interval{" "}
-                                      <strong>
-                                        {profile.long_temporal.continuity
-                                          .positive_interval_consistency !== null
-                                          ? `${(
-                                            profile.long_temporal.continuity
-                                              .positive_interval_consistency * 100
-                                          ).toFixed(1)}%`
-                                          : "Not evaluated"}
-                                      </strong>
-                                    </span>
-
-                                    <span>
-                                      Distinct positive intervals{" "}
-                                      <strong>
-                                        {profile.long_temporal.continuity
-                                          .distinct_positive_interval_count !== null
-                                          ? profile.long_temporal.continuity
-                                            .distinct_positive_interval_count.toLocaleString()
-                                          : "Not fully retained"}
-                                      </strong>
-                                    </span>
-
-                                    <span>
-                                      Interval frequency analysis{" "}
-                                      <strong>
-                                        {profile.long_temporal.continuity
-                                          .interval_frequency_complete
-                                          ? "Complete"
-                                          : "Bounded"}
-                                      </strong>
-                                    </span>
-
-                                    {profile.long_temporal.execution && (
-                                      <>
-                                        <span>
-                                          Observed order basis{" "}
-                                          <strong>
-                                            {profile.long_temporal.execution
-                                              .observed_order_basis ?? "Unknown"}
-                                          </strong>
-                                        </span>
-
-                                        <span>
-                                          Canonical order established{" "}
-                                          <strong>
-                                            {profile.long_temporal.execution
-                                              .canonical_order_established === true
-                                              ? "Yes"
-                                              : profile.long_temporal.execution
-                                                .canonical_order_established === false
-                                                ? "No"
-                                                : "Not evaluated"}
-                                          </strong>
-                                        </span>
-                                      </>
-                                    )}
-
-                                    {profile.long_temporal.continuity
-                                      .largest_positive_intervals.length > 0 && (
-                                        <>
-                                          <span>
-                                            <strong>
-                                              Largest observed positive intervals
-                                            </strong>
-                                          </span>
-
-                                          {profile.long_temporal.continuity
-                                            .largest_positive_intervals.map(
-                                              (interval) => (
-                                                <span
-                                                  key={`${interval.from_index}-${interval.to_index}`}
-                                                >
-                                                  <strong>
-                                                    {interval.interval_seconds >= 3600
-                                                      ? `${(
-                                                        interval.interval_seconds / 3600
-                                                      ).toFixed(1)} h`
-                                                      : `${interval.interval_seconds.toLocaleString()} s`}
-                                                  </strong>{" "}
-                                                  {interval.from_value} → {interval.to_value}
-                                                </span>
-                                              ),
-                                            )}
-                                        </>
-                                      )}
-                                  </div>
-                                </div>
-                              )}
-
+                            {strategy === "long_temporal" && profile.long_temporal?.continuity && (
+                              <TemporalContinuitySummary longTemporal={profile.long_temporal} />
+                            )}
 
                             {strategy === "long_temporal" && (
                               <div className="analysis-group">
