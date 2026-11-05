@@ -1,4 +1,13 @@
 import { UnderstandOverview } from "./components/UnderstandOverview";
+import {
+  createNavigationState,
+  navigate,
+  navigateBack,
+  navigateMain,
+  resetNavigation,
+  type Location,
+  type MainSection,
+} from "./navigation/navigationModel";
 import { TemporalSelection } from "./components/TemporalSelection";
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
@@ -701,13 +710,42 @@ function App() {
     useState(false);
   const [activeProject, setActiveProject] =
     useState<RawsightProject | null>(null);
-  const [activeSection, setActiveSection] =
-    useState<ProjectSection>("raw_analysis");
-  // rs-nav-perf-v01: measurements are development-only; no user data persisted.
+  // Navigation is independent of project data, profile, selections and analysis results.
+  const [navigation, setNavigation] = useState(createNavigationState);
+  // Preserve the legacy render branches during this incremental migration.
+  const activeSection: ProjectSection = navigation.current.section === "explore"
+    ? "raw_analysis"
+    : navigation.current.section === "data"
+      ? navigation.current.view === "columns"
+        ? "lineup"
+        : navigation.current.view === "profile"
+          ? "analysis"
+          : "data"
+      : navigation.current.section;
+
   const navigationStartedAt = useRef<number | null>(null);
   function navigateTo(section: ProjectSection) {
+    const location: Location = section === "raw_analysis"
+      ? { section: "explore", view: "overview" }
+      : section === "lineup"
+        ? { section: "data", view: "columns" }
+        : section === "analysis"
+          ? { section: "data", view: "profile" }
+          : { section, view: "overview" };
     navigationStartedAt.current = performance.now();
-    setActiveSection(section);
+    setNavigation((current) => navigate(current, location));
+  }
+  function navigateToMain(section: MainSection) {
+    navigationStartedAt.current = performance.now();
+    setNavigation((current) => navigateMain(current, section));
+  }
+  function goBack() {
+    navigationStartedAt.current = performance.now();
+    setNavigation((current) => navigateBack(current));
+  }
+  function openExploreVisualization() {
+    navigationStartedAt.current = performance.now();
+    setNavigation((current) => navigate(current, { section: "explore", view: "visualization" }));
   }
   useEffect(() => {
     const start = navigationStartedAt.current;
@@ -715,13 +753,14 @@ function App() {
       navigationStartedAt.current = null;
       if (import.meta.env.DEV) {
         console.info("[RAWSIGHT perf] navigation commit", {
-          section: activeSection,
+          section: navigation.current.section,
+          view: navigation.current.view,
           durationMs: Math.round((performance.now() - start) * 10) / 10,
           note: "Until React effect, not visual paint",
         });
       }
     }
-  }, [activeSection]);
+  }, [navigation]);
 
   wideTemporalSourceKeyRef.current =
     fileInfo?.path ?? null;
@@ -933,7 +972,7 @@ function App() {
       });
 
       setActiveProject(project);
-      setActiveSection("raw_analysis");
+      setNavigation(resetNavigation());
       await loadStoredDatasetProfile(info.path);
 
     } catch (err) {
@@ -968,7 +1007,7 @@ function App() {
     }
   }
   async function openExistingProject(projectItem: ProjectListItem) {
-    setActiveSection("raw_analysis");
+    // Reset navigation only after the requested project is successfully loaded.
     try {
       const rawProject = await invoke<string>("load_project", {
         projectPath: projectItem.path,
@@ -977,6 +1016,7 @@ function App() {
       const project = JSON.parse(rawProject) as RawsightProject;
 
       setActiveProject(project);
+      setNavigation(resetNavigation());
       setError(null);
 
       const activeDataset = project.datasets.find(
@@ -1036,7 +1076,7 @@ function App() {
   }
   function goHome() {
     setActiveProject(null);
-    setActiveSection("raw_analysis");
+    setNavigation(resetNavigation());
     setFileInfo(null);
     setProfile(null);
     setRowInspection(null);
@@ -2157,7 +2197,7 @@ function App() {
                 className="sidebar-home-button"
                 onClick={goHome}
               >
-                ← Home
+                ← Byt projekt
               </button>
 
               <div className="sidebar-project-name">
@@ -2165,14 +2205,14 @@ function App() {
               </div>
 
               <nav className="project-navigation" aria-label="Projektmeny">
-                <button type="button" onClick={() => navigateTo("raw_analysis")}
-                  className={activeSection === "raw_analysis" ? "active" : ""}>Explore</button>
-                <button type="button" onClick={() => navigateTo("data")}
-                  className={["data", "lineup", "analysis"].includes(activeSection) ? "active" : ""}>Data</button>
-                <button type="button" onClick={() => navigateTo("metadata")}
-                  className={activeSection === "metadata" ? "active" : ""}>Metadata</button>
-                <button type="button" onClick={() => navigateTo("history")}
-                  className={activeSection === "history" ? "active" : ""}>History</button>
+                <button type="button" onClick={() => navigateToMain("explore")}
+                  className={navigation.current.section === "explore" ? "active" : ""}>Explore</button>
+                <button type="button" onClick={() => navigateToMain("data")}
+                  className={navigation.current.section === "data" ? "active" : ""}>Data</button>
+                <button type="button" onClick={() => navigateToMain("metadata")}
+                  className={navigation.current.section === "metadata" ? "active" : ""}>Metadata</button>
+                <button type="button" onClick={() => navigateToMain("history")}
+                  className={navigation.current.section === "history" ? "active" : ""}>History</button>
               </nav>
             </aside>
 
@@ -2183,7 +2223,7 @@ function App() {
                   {activeSection === "lineup" && "The Lineup"}
                   {activeSection === "metadata" && "Metadata"}
                   {activeSection === "analysis" && "Light Analysis"}
-                  {activeSection === "raw_analysis" && "Explore"}
+                  {activeSection === "raw_analysis" && (navigation.current.section === "explore" && navigation.current.view === "visualization" ? "Explore / Visualisering" : "Explore / Överblick")}
                   {activeSection === "history" && "History"}
                 </div>
 
@@ -2191,6 +2231,19 @@ function App() {
               </div>
 
               <div className="project-workspace-content">
+                {navigation.history.length > 0 && (
+                  <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 16 }}>
+                    <button type="button" onClick={goBack} aria-label="Tillbaka till föregående vy">
+                      ← Tillbaka
+                    </button>
+                    <span style={{ opacity: 0.7, fontSize: "0.875rem" }}>
+                      {navigation.current.section === "explore" ? "Explore" :
+                        navigation.current.section === "data" ? "Data" :
+                          navigation.current.section === "metadata" ? "Metadata" : "History"}
+                      {navigation.current.view !== "overview" ? ` / ${navigation.current.view === "visualization" ? "Visualisering" : navigation.current.view === "profile" ? "Dataprofil" : navigation.current.view === "columns" ? "Analyskolumner" : navigation.current.view === "discoveries" ? "Upptäckter" : "Kvalitet"}` : ""}
+                    </span>
+                  </div>
+                )}
                 {activeSection === "data" && (
                   <div className="analysis-group" aria-label="Dataverktyg">
                     <div className="analysis-group-header"><strong>Dataverktyg</strong></div>
@@ -2232,19 +2285,33 @@ function App() {
                       <button type="button" onClick={runLightAnalysis} disabled={isAnalyzing || !fileInfo}>
                         {isAnalyzing ? "Analyserar..." : "Kontrollera sparad profil"}
                       </button>
-                      {profile && <button type="button" onClick={() => setActiveSection("raw_analysis")}>Explore</button>}
+                      {profile && <button type="button" onClick={() => navigateTo("raw_analysis")}>Explore</button>}
                     </div>
                   </div>
                 )}
                 {activeSection === "raw_analysis" && (
                   <div className="metadata-workspace">
-                    <UnderstandOverview
-                      profile={profile}
-                      fileName={fileInfo?.name}
-                      loading={isAnalyzing}
-                      onOpenAnalysis={() => setActiveSection("analysis")}
-                      onExplore={() => document.getElementById("rs-explore-details")?.scrollIntoView({ behavior: "smooth", block: "start" })}
-                    />
+                    {navigation.current.section === "explore" && navigation.current.view === "overview" && (
+                      <UnderstandOverview
+                        profile={profile}
+                        fileName={fileInfo?.name}
+                        loading={isAnalyzing}
+                        onOpenAnalysis={() => navigateTo("analysis")}
+                        onExplore={openExploreVisualization}
+                      />
+                    )}
+                    {navigation.current.section === "explore" && (
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }} aria-label="Utforska data">
+                        <button type="button" onClick={() => navigateTo("raw_analysis")}
+                          aria-current={navigation.current.view === "overview" ? "page" : undefined}
+                          disabled={navigation.current.view === "overview"}>Överblick</button>
+                        <button type="button" onClick={openExploreVisualization}
+                          aria-current={navigation.current.view === "visualization" ? "page" : undefined}
+                          disabled={navigation.current.view === "visualization"}>Visualisering</button>
+                      </div>
+                    )}
+                    {navigation.current.section === "explore" && navigation.current.view === "visualization" && (
+                      <>
                     <div id="rs-explore-details" className="metadata-header">
                       <div>
                         <strong>Explore</strong>
@@ -3190,6 +3257,8 @@ function App() {
                           </>
                         );
                       })()
+                    )}
+                      </>
                     )}
                   </div>
                 )}
