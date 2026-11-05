@@ -18,6 +18,14 @@ from rawsight.long_temporal_series_execution import (
 from rawsight.source_context import SourceExecutionContext
 
 
+class InsufficientOrderingError(ValueError):
+    """The source cannot establish unique observations for this comparison."""
+
+
+class EventResourceLimitError(ValueError):
+    """The bounded scan cannot return a complete set of temporal gaps."""
+
+
 def _check_int(name: str, value: Any, lower: int, upper: int) -> None:
     if type(value) is not int or not lower <= value <= upper:
         raise ValueError(f'{name} must be an integer from {lower} to {upper}')
@@ -65,11 +73,11 @@ def _find_gaps(context: SourceExecutionContext, temporal_axis: dict[str, Any],
     if len(records) > max_events:
         # Explicit rejection: a partial top-N candidate set must not be mistaken
         # for exhaustive event discovery.
-        raise ValueError('More gaps than max_events; narrow the scope or increase the cap')
+        raise EventResourceLimitError('More gaps than max_events; narrow the scope or increase the cap')
     results = []
     for prior, current, duration, duplicates in records:
         if duplicates != 1:
-            raise ValueError('Temporal gap endpoint has duplicate timestamps')
+            raise InsufficientOrderingError('Temporal gap endpoint has duplicate timestamps')
         results.append({'id': f'gap:{prior.isoformat()}:{current.isoformat()}',
                         'anchor': {'kind':'temporal_gap',
                                    'before_time':prior.isoformat(),
@@ -115,7 +123,7 @@ def _contiguous_tail(rows: list[dict[str, Any]], side: str,
         dt = abs((datetime.fromisoformat(record['time']) -
                   datetime.fromisoformat(kept[-1]['time'])).total_seconds())
         if dt <= 0:
-            raise ValueError('Duplicate or unsorted observation timestamps in event window')
+            raise InsufficientOrderingError('Duplicate or unsorted observation timestamps in event window')
         if dt > threshold_seconds:
             break
         kept.append(record)
@@ -185,6 +193,18 @@ def execute_event_context_similarity(
     if scan_start is not None and scan_end is not None and scan_start >= scan_end:
         raise ValueError('gap_scan_start must be earlier than gap_scan_end')
 
+    def unavailable(status: str, reason_code: str, explanation: str) -> dict[str, Any]:
+        # Do not return partial discovery as if its anchors were verified or scored.
+        return {
+            'analysis_kind': 'event_context_similarity_execution',
+            'status': status,
+            'reason_code': reason_code,
+            'events': [],
+            'comparison': None,
+            'gap_scan_scope': {'start': gap_scan_start, 'end': gap_scan_end},
+            'limitations': [explanation],
+        }
+
     def run(context: SourceExecutionContext) -> dict[str, Any]:
         if not context.is_open:
             raise RuntimeError('SourceExecutionContext must be open')
@@ -193,8 +213,15 @@ def execute_event_context_similarity(
                    if i != axis and _is_numeric_type(typ)}
         if any(name not in numeric for name in selected_columns):
             raise ValueError('Selected columns must be numeric source columns')
-        events = _find_gaps(context, temporal_axis, expected_interval_seconds,
-                            gap_multiple, max_events, scan_start, scan_end)
+        try:
+            events = _find_gaps(context, temporal_axis, expected_interval_seconds,
+                                gap_multiple, max_events, scan_start, scan_end)
+        except EventResourceLimitError:
+            return unavailable('resource_limit', 'gap_event_cap_exceeded',
+                               'The complete gap set exceeds max_events. Narrow the scan scope or increase the cap.')
+        except InsufficientOrderingError:
+            return unavailable('insufficient_ordering', 'non_unique_gap_endpoint',
+                               'A gap endpoint has a non-unique timestamp. Source ordering is not established; no similarity was scored.')
         if target_event_id is not None and (not isinstance(target_event_id, str) or not target_event_id):
             raise ValueError('target_event_id must be a nonempty string')
         if target_event_id is not None and target_event_id not in {e['id'] for e in events}:
@@ -210,13 +237,21 @@ def execute_event_context_similarity(
         for event in events:
             # Existing trusted adapter verifies both anchors are real, adjacent,
             # unique and belong to this source. Its summary also checks continuity.
-            summary = execute_event_context(
-                file_path=file_path, temporal_axis=temporal_axis,
-                anchor=event['anchor'], selected_columns=selected_columns,
-                expected_interval_seconds=expected_interval_seconds,
-                gap_multiple=gap_multiple, before_points=points_per_side,
-                after_points=points_per_side, source_context=context,
-            )
+            try:
+                summary = execute_event_context(
+                    file_path=file_path, temporal_axis=temporal_axis,
+                    anchor=event['anchor'], selected_columns=selected_columns,
+                    expected_interval_seconds=expected_interval_seconds,
+                    gap_multiple=gap_multiple, before_points=points_per_side,
+                    after_points=points_per_side, source_context=context,
+                )
+            except ValueError as exc:
+                # The trusted adapter checks BOTH endpoint timestamps. Other
+                # validation failures remain errors, not 'insufficient_ordering'.
+                if str(exc) != 'Gap endpoints must have unique timestamps':
+                    raise
+                return unavailable('insufficient_ordering', 'non_unique_gap_endpoint',
+                                   'A verified gap anchor requires unique timestamps at both endpoints. No similarity was scored.')
             sides = {}
             counts = {}
             timing = {}
@@ -224,7 +259,11 @@ def execute_event_context_similarity(
                                    ('after',event['anchor']['after_time'])):
                 fetched = _side_rows(context, temporal_axis, selected_columns,
                                      endpoint, side, points_per_side)
-                contiguous = _contiguous_tail(fetched, side, threshold)
+                try:
+                    contiguous = _contiguous_tail(fetched, side, threshold)
+                except InsufficientOrderingError:
+                    return unavailable('insufficient_ordering', 'non_unique_observation_window',
+                                       'A comparison window contains duplicate or unordered timestamps. No similarity was scored.')
                 if len(contiguous) != summary[side]['observation_count']:
                     raise RuntimeError('Context and source windows disagree')
                 sides[side] = _aligned_side(contiguous, selected_columns, points_per_side)
