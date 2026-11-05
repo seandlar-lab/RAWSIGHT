@@ -1,3 +1,4 @@
+import { LongTemporalSeriesPresentation } from "./workspaces/LongTemporalSeriesPresentation";
 import { ExploreWorkspace } from "./workspaces/ExploreWorkspace";
 import { ExploreStructureSummary, TemporalContinuitySummary } from "./workspaces/ExploreVisualization";
 import {
@@ -9,7 +10,6 @@ import {
   type Location,
   type MainSection,
 } from "./navigation/navigationModel";
-import { TemporalSelection } from "./components/TemporalSelection";
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -34,9 +34,6 @@ import type {
   LongTemporalSeriesDetailResult,
   LongTemporalSeriesResult,
 } from "./types/longTemporalSeries";
-import {
-  LongTemporalSeriesChart,
-} from "./components/LongTemporalSeriesChart";
 import type {
   WideTemporalSeriesDetail,
   WideTemporalSeriesPage,
@@ -2812,143 +2809,16 @@ function App() {
                                         : "Show temporal series"}
                                     </button>
 
-                                    {longTemporalSeries && (
-                                      <div
-                                        style={{
-                                          marginTop: "24px",
-                                          display: "grid",
-                                          gap: "16px",
-                                        }}
-                                      >
-                                        <div className="analysis-group-content">
-                                          <span>
-                                            Value field{" "}
-                                            <strong>
-                                              {
-                                                longTemporalSeries
-                                                  .value_column_name
-                                              }
-                                            </strong>
-                                          </span>
-
-                                          <span>
-                                            Usable observations{" "}
-                                            <strong>
-                                              {longTemporalSeries.source
-                                                .usable_observation_count
-                                                .toLocaleString()}
-                                            </strong>
-                                          </span>
-
-                                          <span>
-                                            Projection{" "}
-                                            <strong>
-                                              {
-                                                longTemporalSeries
-                                                  .display_projection
-                                                  .mode
-                                              }
-                                            </strong>
-                                          </span>
-
-                                          <span>
-                                            Display points{" "}
-                                            <strong>
-                                              {longTemporalSeries
-                                                .display_projection
-                                                .point_count
-                                                .toLocaleString()}
-                                            </strong>
-                                          </span>
-                                        </div>
-                                        {longTemporalSeries.execution
-                                          .limitations.length > 0 && (
-                                            <div className="analysis-group-content">
-                                              {longTemporalSeries.execution
-                                                .limitations.map(
-                                                  (limitation) => (
-                                                    <span key={limitation}>
-                                                      {limitation}
-                                                    </span>
-                                                  ),
-                                                )}
-                                            </div>
-                                          )}
-
-                                        <TemporalSelection
-                                          key={`${fileInfo?.path ?? ""}:${longTemporalSeries.value_column_name}`}
-                                          result={longTemporalSeries}
-                                          selectedRange={longTemporalSeriesDetail?.requested_range ?? null}
-                                          loading={isLoadingLongTemporalSeriesDetail}
-                                          onApply={(start, end) => {
-                                            void loadLongTemporalSeriesDetail(
-                                              longTemporalSeries.value_column_name,
-                                              start,
-                                              end,
-                                            );
-                                          }}
-                                        />
-                                                                                <LongTemporalSeriesChart
-                                          result={longTemporalSeries}
-                                          selectedRange={
-                                            longTemporalSeriesDetail
-                                              ?.requested_range ?? null
-                                          }
-                                          onSelectBucket={(bucket) => {
-                                            void loadLongTemporalSeriesDetail(
-                                              longTemporalSeries.value_column_name,
-                                              bucket.bucket_start,
-                                              bucket.bucket_end,
-                                            );
-                                          }}
-                                        />
-
-                                        {isLoadingLongTemporalSeriesDetail && (
-                                          <div className="analysis-group-content">
-                                            <span>
-                                              Loading selected temporal interval...
-                                            </span>
-                                          </div>
-                                        )}
-
-                                        {longTemporalSeriesDetail && (
-                                          <div
-                                            style={{
-                                              display: "grid",
-                                              gap: "12px",
-                                            }}
-                                          >
-                                            <div className="analysis-group-content">
-                                              <span>
-                                                Selected interval{" "}
-                                                <strong>
-                                                  {longTemporalSeriesDetail.requested_range.start}
-                                                  {" -> "}
-                                                  {longTemporalSeriesDetail.requested_range.end}
-                                                </strong>
-                                              </span>
-
-                                              <span>
-                                                Matching observations{" "}
-                                                <strong>
-                                                  {longTemporalSeriesDetail.source
-                                                    .matching_observation_count
-                                                    .toLocaleString()}
-                                                </strong>
-                                              </span>
-                                            </div>
-
-                                            <LongTemporalSeriesChart
-                                              result={longTemporalSeriesDetail}
-                                              onSelectBucket={(bucket) => {
-                                                void loadLongTemporalSeriesDetail(
-                                                  longTemporalSeriesDetail.value_column_name,
-                                                  bucket.bucket_start,
-                                                  bucket.bucket_end,
-                                                );
-                                              }}
-                                            />
-                                            {fileInfo && profile?.structural_model?.logical_structure?.temporal_axis?.orientation === "vertical" && (
+                                    <LongTemporalSeriesPresentation
+                                      sourcePath={fileInfo?.path ?? ""}
+                                      series={longTemporalSeries}
+                                      detail={longTemporalSeriesDetail}
+                                      detailLoading={isLoadingLongTemporalSeriesDetail}
+                                      onSelectInterval={(column, start, end) => {
+                                        void loadLongTemporalSeriesDetail(column, start, end);
+                                      }}
+                                    >
+                                            {longTemporalSeriesDetail && fileInfo && profile?.structural_model?.logical_structure?.temporal_axis?.orientation === "vertical" && (
                                               <>
                                                 <EventSimilarityExplore
                                                   path={fileInfo.path}
@@ -2966,11 +2836,7 @@ function App() {
                                                 />
                                               </>
                                             )}
-                                          </div>
-                                        )}
-
-                                      </div>
-                                    )}
+                                    </LongTemporalSeriesPresentation>
                                   </div >
                                 )}
                               </div>
