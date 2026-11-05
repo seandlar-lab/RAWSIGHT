@@ -1,4 +1,4 @@
-import { UnderstandOverview } from "./components/UnderstandOverview";
+import { ExploreWorkspace } from "./workspaces/ExploreWorkspace";
 import {
   createNavigationState,
   navigate,
@@ -2290,37 +2290,15 @@ function App() {
                   </div>
                 )}
                 {activeSection === "raw_analysis" && (
-                  <div className="metadata-workspace">
-                    {navigation.current.section === "explore" && navigation.current.view === "overview" && (
-                      <UnderstandOverview
-                        profile={profile}
-                        fileName={fileInfo?.name}
-                        loading={isAnalyzing}
-                        onOpenAnalysis={() => navigateTo("analysis")}
-                        onExplore={openExploreVisualization}
-                      />
-                    )}
-                    {navigation.current.section === "explore" && (
-                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }} aria-label="Utforska data">
-                        <button type="button" onClick={() => navigateTo("raw_analysis")}
-                          aria-current={navigation.current.view === "overview" ? "page" : undefined}
-                          disabled={navigation.current.view === "overview"}>Överblick</button>
-                        <button type="button" onClick={openExploreVisualization}
-                          aria-current={navigation.current.view === "visualization" ? "page" : undefined}
-                          disabled={navigation.current.view === "visualization"}>Visualisering</button>
-                      </div>
-                    )}
-                    {navigation.current.section === "explore" && navigation.current.view === "visualization" && (
-                      <>
-                    <div id="rs-explore-details" className="metadata-header">
-                      <div>
-                        <strong>Explore</strong>
-                        <p>
-                          Explore the dataset using the structure detected by Light Analysis.
-                        </p>
-                      </div>
-                    </div>
-
+                  <ExploreWorkspace
+                    view={navigation.current.section === "explore" ? navigation.current.view : "overview"}
+                    profile={profile}
+                    fileName={fileInfo?.name}
+                    loading={isAnalyzing}
+                    onOpenAnalysis={() => navigateTo("analysis")}
+                    onOverview={() => navigateTo("raw_analysis")}
+                    onVisualization={openExploreVisualization}
+                  >
                     {!profile ? (
                       <div className="analysis-group">
                         <div className="analysis-group-header">
@@ -3258,9 +3236,7 @@ function App() {
                         );
                       })()
                     )}
-                      </>
-                    )}
-                  </div>
+                  </ExploreWorkspace>
                 )}
                 {activeSection === "lineup" && (
                   <div className="metadata-workspace">
