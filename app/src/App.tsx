@@ -1,3 +1,4 @@
+import { HomeScreen } from "./components/HomeScreen";
 import { LongTemporalSeriesPresentation } from "./workspaces/LongTemporalSeriesPresentation";
 import { ExploreWorkspace } from "./workspaces/ExploreWorkspace";
 import { ExploreStructureSummary, TemporalContinuitySummary } from "./workspaces/ExploreVisualization";
@@ -2163,27 +2164,14 @@ function App() {
     }
   }
   return (
-    <main className="app-shell">
-      <section
-        className={
-          activeProject
-            ? "project-page"
-            : "hero"
-        }
-      >
-        <div className="app-header">
-          <div className="brand">RAWSIGHT</div>
-
-          <button
-            type="button"
-            className="power-button"
-            onClick={exitApplication}
-            title="Exit RAWSIGHT"
-            aria-label="Exit RAWSIGHT"
-          >
-            ⏻
-          </button>
-        </div>
+    <main className={activeProject ? "app-shell" : "app-shell rs-home-app-shell"}>
+      <section className={activeProject ? "project-page" : "rs-home-host"}>
+        {activeProject && (
+          <div className="app-header">
+            <div className="brand">RAWSIGHT</div>
+            <button type="button" className="power-button" onClick={() => { void exitApplication().catch((reason) => setError(`Could not close RAWSIGHT: ${String(reason)}`)); }} title="Avsluta RAWSIGHT" aria-label="Avsluta RAWSIGHT">⏻</button>
+          </div>
+        )}
 
         {activeProject ? (
           <div className="project-shell">
@@ -4061,79 +4049,17 @@ function App() {
             </main>
           </div >
         ) : (
-          <>
-            <h1>The good, the bad and the ugly of your data.</h1>
-
-            <p className="subtitle">
-              Understand, validate and prepare your data for AI.
-            </p>
-
-            <div className="drop-zone">
-              <div className="drop-icon">+</div>
-
-              <h2>Drop a dataset here</h2>
-
-              <p>CSV · Excel · Parquet</p>
-
-              <button
-                type="button"
-                onClick={openDataset}
-                disabled={isAnalyzing}
-              >
-                {isAnalyzing ? "Analyzing..." : "Open dataset"}
-              </button>
-            </div>
-
-            {error && (
-              <div className="analysis-error">
-                <strong>Something went wrong</strong>
-                <span>{error}</span>
-              </div>
-            )}
-
-            <p className="local-note">
-              Your source data stays local.
-            </p>
-            <div className="home-project-tools">
-              {appSettings && (
-                <div className="project-location">
-                  <div>
-                    <div className="project-location-label">
-                      Project location
-                    </div>
-
-                    <div className="project-location-path">
-                      {appSettings.defaultProjectRoot}
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    className="project-location-button"
-                    onClick={changeProjectRoot}
-                  >
-                    Change...
-                  </button>
-                </div>
-              )}
-
-              {projects.length > 0 && (
-                <div className="recent-projects">
-                  <strong>Recent projects</strong>
-
-                  {projects.map((project) => (
-                    <button
-                      key={project.id}
-                      type="button"
-                      onClick={() => openExistingProject(project)}
-                    >
-                      {project.name}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </>
+          <HomeScreen
+            projects={projects}
+            projectRoot={appSettings?.defaultProjectRoot ?? null}
+            onOpenDataset={() => { void openDataset(); }}
+            onOpenProject={(project) => { void openExistingProject(project); }}
+            onChangeProjectRoot={() => { void changeProjectRoot(); }}
+            onExit={() => { void exitApplication().catch((reason) => setError(`Could not close RAWSIGHT: ${String(reason)}`)); }}
+            busy={isAnalyzing}
+            progressMessage={progressMessage}
+            error={error}
+          />
         )
         }
       </section >

@@ -845,3 +845,11 @@ h1 {
 .temporal-gap-table th {
   font-weight: 600;
 }
+/* RAWSIGHT home screen v1: scoped, does not affect project workspaces. */
+.app-shell.rs-home-app-shell {
+  display: block;
+  padding: 0;
+  background: #f7fafc;
+  min-height: 100vh;
+}
+.rs-home-host { width: 100%; min-width: 0; }
